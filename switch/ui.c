@@ -150,7 +150,7 @@ static void check(Canvas *canvas, int x, int y) {
 
 static const char *state_name(const App *app) {
 #ifdef IZ_STORE_STANDALONE
-    if (app->package.kind == PACKAGE_IZM) return "Requires IZlauncher";
+    if (app->package.kind == PACKAGE_IZM) return "Requires IZ2S";
 #endif
     switch (app->state) {
         case INSTALLED: return "Installed";
@@ -428,7 +428,7 @@ static void dialog(Canvas *canvas, const App *app, const View *view) {
     if (view->screen == CONFIRM_COMPATIBILITY) {
         label(canvas,376,254,530,MEDIUM,ink,"IZA compatibility");
         wrap(canvas,376,308,528,3,NORMAL,muted,
-            "This app needs a compatible IZlauncher. A homebrew menu that only runs NRO cannot open IZA apps.");
+            "This app needs a compatible IZ2S runtime. A homebrew menu that only runs NRO cannot open IZA apps.");
         action_button(canvas,366,415,220,"A","Continue",true);
         action_button(canvas,660,415,235,"B","Cancel",false);
         return;

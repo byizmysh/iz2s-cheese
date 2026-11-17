@@ -3,7 +3,7 @@
   "abi": 1,
   "id": "iz2s-store",
   "name": "IZ2S Store",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Install Switch 2 homebrew from SD or GitHub",
   "icon": "assets/icon.png",
   "transition": "none",

@@ -65,7 +65,7 @@ static bool slug(const char *text, size_t size) {
     return true;
 }
 
-bool github_release_url(const char *url) {
+bool github_release_url(const char *url, const char *extension) {
     const char prefix[] = "https://github.com/";
     const char release[] = "/releases/download/";
     if (strlen(url) >= RELEASE_URL_MAX || strncmp(url, prefix, sizeof prefix - 1)) return false;
@@ -80,7 +80,12 @@ bool github_release_url(const char *url) {
     if (!file || !slug(tag, (size_t)(file - tag))) return false;
     ++file;
     size_t size = strlen(file);
-    return size > 4 && slug(file, size) && !strcasecmp(file + size - 4, ".nro");
+    if (!slug(file, size)) return false;
+    const char *suffix = strrchr(file, '.');
+    if (!suffix || suffix == file) return false;
+    if (extension) return !strcasecmp(suffix + 1, extension);
+    return !strcasecmp(suffix, ".nro") || !strcasecmp(suffix, ".iza") ||
+           !strcasecmp(suffix, ".izdata");
 }
 
 typedef enum { RELEASE_GET, RELEASE_HEAD, CATALOG_GET } Request;
@@ -400,9 +405,9 @@ static bool request_url(const char *url, Request mode, uint64_t size, DownloadSi
     bool catalog = mode == CATALOG_GET;
     bool site_probe = mode == RELEASE_HEAD && !url;
     if (site_probe) url = "https://github.com/";
-    if (!site_probe && (catalog ? !catalog_url(url) : !github_release_url(url)))
+    if (!site_probe && (catalog ? !catalog_url(url) : !github_release_url(url, NULL)))
         return error_message(out, catalog ? "Use raw GitHub HTTPS or a private LAN HTTP URL." :
-                                             "Use a direct GitHub release link for an NRO.");
+                                             "Use a direct GitHub release asset link.");
     bool encrypted = !strncmp(url, "https://", 8);
     bool owns_sockets;
     if (!network_begin(encrypted, &owns_sockets, out)) return false;

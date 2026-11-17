@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from io import BytesIO
 from pathlib import Path
@@ -68,6 +70,32 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
     if (!ok) snprintf(out, DOWNLOAD_MESSAGE, "Test source read failed.");
     return ok;
 }
+
+bool __wrap_github_download(const char *url, uint64_t size, DownloadSink sink, void *context,
+                            const atomic_bool *cancel, char out[DOWNLOAD_MESSAGE]) {
+    const char release[] = "https://github.com/test/fixtures/releases/download/v1/";
+    if (strncmp(url, release, sizeof release - 1) || !github_release_url(url, NULL)) return false;
+    char path[1024];
+    int length = snprintf(path, sizeof path, "%s/%s", getenv("IZ_STORE_TEST_RELEASE"),
+                          url + sizeof release - 1);
+    if (length < 0 || (size_t)length >= sizeof path) return false;
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        snprintf(out, DOWNLOAD_MESSAGE, "Release file missing.");
+        return false;
+    }
+    unsigned char data[1024];
+    size_t count;
+    bool ok = true;
+    while (ok && (count = fread(data, 1, sizeof data, file)) != 0) {
+        ok = (!cancel || !atomic_load(cancel)) && count <= size && sink(context, data, count);
+        size -= ok ? count : 0;
+    }
+    ok = ok && !ferror(file) && size == 0;
+    fclose(file);
+    if (!ok) snprintf(out, DOWNLOAD_MESSAGE, "Release transfer failed.");
+    return ok;
+}
 ''')
     url = 'https://raw.githubusercontent.com/example/store-feed/main/catalog.tsv'
     source = work / 'feed.tsv'
@@ -81,6 +109,37 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
     app_ids = [line.split('\t')[1] for line in initial.splitlines() if line.startswith('app\t')]
     assert app_ids
     image_pack = b'IZART1\n\x01' + app_ids[0].encode().ljust(48, b'\0') + b'\xff' * (96 * 96 * 4)
+    release = work / 'release'
+    release.mkdir()
+
+    def digest(data):
+        return hashlib.sha256(data).hexdigest()
+
+    def file_row(data, name):
+        return f'file\t{len(data)}\t{digest(data)}\t{name}\n'
+
+    def online_iza(version, assets):
+        header = bytearray(512)
+        header[:8] = b'IZSDAPP1'
+        struct.pack_into('<4I', header, 8, 2, len(header), len(header), 8 if assets else 0)
+        header[24:32] = b'feed-iza'
+        if assets:
+            struct.pack_into('<2I', header, 160, len(assets), sum(map(len, assets.values())))
+            identities = [[name, len(data), digest(data)] for name, data in sorted(assets.items())]
+            binding = 'iz2s.sd-assets.v1\n' + json.dumps(identities, separators=(',', ':'))
+            header[368:400] = hashlib.sha256(binding.encode()).digest()
+        launcher = bytes(header)
+        (release / 'program.iza').write_bytes(launcher)
+        for name, data in assets.items():
+            (release / name).write_bytes(data)
+        return (f'app\tfeed-iza\tiza\t{version}\tFixture IZA\tExample\tTools\tTest.\n'
+                + file_row(launcher, 'launcher.iza')
+                + ''.join(file_row(data, name) for name, data in assets.items())
+                + 'github\thttps://github.com/test/fixtures/releases/download/v1/program.iza\n')
+
+    mixed_nro = ('IZSTORE2\napp\ttest-nro\tnro\t1.0\tFixture NRO\tExample\tTools\tTest.\n'
+                 + file_row(b'nro', 'launcher.nro')
+                 + 'github\thttps://github.com/test/fixtures/releases/download/v1/program.nro\n')
     for standalone in (False, True):
         binary = work / 'host-check'
         sd = work / ('sd-nro' if standalone else 'sd-iza')
@@ -90,13 +149,14 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
             *(['-DIZ_STORE_STANDALONE'] if standalone else []),
             '-I' + str(module / 'switch'), module / 'host-check.c', mock,
             *(module / 'switch' / name for name in ('store.c', 'ui.c', 'download.c', 'installed-artwork.c')),
-            '-Wl,--wrap=catalog_download', '-lssl', '-lcrypto', '-o', binary,
+            '-Wl,--wrap=catalog_download', '-Wl,--wrap=github_download', '-lssl', '-lcrypto', '-o', binary,
         ], check=True)
 
         def run(*args, code=0):
             result = subprocess.run([binary, sd, *args], capture_output=True, text=True,
                                     env={**os.environ, 'IZ_STORE_TEST_CATALOG': str(source),
-                                         'IZ_STORE_TEST_ARTWORK_PACK': str(artwork)})
+                                         'IZ_STORE_TEST_ARTWORK_PACK': str(artwork),
+                                         'IZ_STORE_TEST_RELEASE': str(release)})
             assert result.returncode == code, (args, result.stdout, result.stderr)
             return result.stdout
 
@@ -175,4 +235,46 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
         (install_root / local_id / '.izstore-icon.rgba').write_bytes(b'\x00\xff\x00\xff' * (96 * 96))
         assert run('icon', local_id).strip() == 'ff00ff00'
 
-print('Verified both sources, Installed filter, SD thumbnails, embedded NRO icons and offline cache.')
+        source.write_text(mixed_nro + online_iza('1.0', {}))
+        artwork.write_bytes(image_pack)
+        assert '2 online entries' in run('fetch-list', url)
+        assert [line.split('\t')[0] for line in run('list').splitlines()] == ['test-nro', 'feed-iza']
+        if standalone:
+            assert 'IZA apps require IZ2S' in run('raw-install', 'feed-iza', code=1)
+            assert not (install_root / 'feed-iza').exists()
+            continue
+        assert 'Installed 1.0' in run('raw-install', 'feed-iza')
+        app_dir = install_root / 'feed-iza'
+        launcher = app_dir / 'launcher.iza'
+        old_launcher = launcher.read_bytes()
+
+        resources = {f'asset-{digest(data)}.izdata': data for data in (b'first file', b'second file')}
+        resources = dict(sorted(resources.items(), reverse=True))
+        updated = mixed_nro + online_iza('2.0', resources)
+        source.write_text(updated)
+        assert '2 online entries' in run('fetch-list', url)
+
+        last = next(reversed(resources))
+        (release / last).write_bytes(b'X' * len(resources[last]))
+        assert 'SHA-256' in run('raw-install', 'feed-iza', code=1)
+        assert launcher.read_bytes() == old_launcher
+        assert not list(app_dir.glob('*.izdata'))
+        (release / last).write_bytes(resources[last])
+
+        wrong_data = b'Y' * len(resources[last])
+        wrong_name = f'asset-{digest(wrong_data)}.izdata'
+        source.write_text(updated.replace(file_row(resources[last], last), file_row(wrong_data, wrong_name)))
+        assert '2 online entries' in run('fetch-list', url)
+        assert 'incompatible' in run('raw-install', 'feed-iza', code=1)
+        assert launcher.read_bytes() == old_launcher
+
+        source.write_text(updated)
+        assert '2 online entries' in run('fetch-list', url)
+        assert 'Updated to 2.0' in run('raw-install', 'feed-iza')
+        assert launcher.read_bytes() == (release / 'program.iza').read_bytes()
+        assert all((app_dir / name).read_bytes() == data for name, data in resources.items())
+        assert 'Removed' in run('raw-remove', 'feed-iza')
+        assert not launcher.exists() and not list(app_dir.glob('*.izdata'))
+
+
+print('Verified catalog caching, artwork, mixed feeds and online IZA install, update and rollback.')

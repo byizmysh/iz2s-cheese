@@ -162,7 +162,7 @@ static bool app_line(Package *app, char *line) {
         !strcmp(values[0], "iz2s-store")) return false;
     if (!strcmp(values[1], "nro")) app->kind = PACKAGE_NRO;
     else if (!strcmp(values[1], "izm-nro")) app->kind = PACKAGE_IZM_NRO;
-    else if (!strcmp(values[1], "izm")) app->kind = PACKAGE_IZM;
+    else if (!strcmp(values[1], "iza") || !strcmp(values[1], "izm")) app->kind = PACKAGE_IZM;
     else return false;
     return field(app->id, sizeof app->id, values[0]) &&
            field(app->version, sizeof app->version, values[2]) &&
@@ -230,8 +230,8 @@ static bool parse(FILE *file, App *apps, unsigned limit, unsigned *count, bool r
                 if (package->repository[0] || !repository_url(line + 11)) return false;
                 strcpy(package->repository, line + 11);
             } else if (online_catalog && !strncmp(line, "github\t", 7)) {
-                if (package->kind != PACKAGE_NRO || package->count != 1 ||
-                    package->release_url[0] || !github_release_url(line + 7)) return false;
+                if (package->kind == PACKAGE_IZM_NRO || !package->count || package->release_url[0] ||
+                    !github_release_url(line + 7, store_extension(package->kind))) return false;
                 strcpy(package->release_url, line + 7);
             } else if (strncmp(line, "file\t", 5) || !file_line(package, line + 5, receipt)) return false;
         }
@@ -325,6 +325,43 @@ static uint32_t read_word(const uint8_t *value) {
         ((uint32_t)value[2] << 16) | ((uint32_t)value[3] << 24);
 }
 
+static int compare_asset_names(const void *left, const void *right) {
+    const PackageFile *const *a = left;
+    const PackageFile *const *b = right;
+    return strcmp((*a)->name, (*b)->name);
+}
+
+static bool valid_companions(const uint8_t header[512], const Package *app) {
+    unsigned count = app->count - 1;
+    if (!(read_word(header + 20) & 8u)) return count == 0;
+    if (read_word(header + 8) != 2 || !count || read_word(header + 160) != count) return false;
+
+    const PackageFile *files[STORE_MAX_FILES - 1];
+    uint64_t total = 0;
+    for (unsigned i = 0; i < count; ++i) {
+        files[i] = &app->files[i + 1];
+        total += files[i]->bytes;
+    }
+    if (read_word(header + 164) != total) return false;
+    qsort(files, count, sizeof *files, compare_asset_names);
+
+    // Canonical asset list used by the IZ2S package builder and importer.
+    const char prefix[] = "iz2s.sd-assets.v1\n[";
+    uint8_t digest[32];
+    Hash hash;
+    if (!hash_open(&hash)) return false;
+    bool ok = hash_write(&hash, prefix, sizeof prefix - 1);
+    for (unsigned i = 0; ok && i < count; ++i) {
+        const PackageFile *asset = files[i];
+        char row[192];
+        int length = snprintf(row, sizeof row, "%s[\"%s\",%llu,\"%s\"]",
+                              i ? "," : "", asset->name, (unsigned long long)asset->bytes, asset->digest);
+        ok = length > 0 && (size_t)length < sizeof row && hash_write(&hash, row, (size_t)length);
+    }
+    ok = ok && hash_write(&hash, "]", 1);
+    return hash_close(&hash, digest) && ok && !memcmp(header + 368, digest, sizeof digest);
+}
+
 static bool valid_image(const char *file, const Package *app) {
     uint8_t head[4096];
     size_t need = app->kind == PACKAGE_IZM ? 512 : sizeof head;
@@ -348,14 +385,11 @@ static bool valid_image(const char *file, const Package *app) {
         return false;
 #endif
     }
-    uint32_t version = read_word(head + 8), flags = read_word(head + 20);
-    uint64_t companions = 0;
-    for (unsigned i = 1; i < app->count; ++i) companions += app->files[i].bytes;
+    uint32_t version = read_word(head + 8);
     return !memcmp(head, "IZSDAPP1", 8) && (version == 1 || version == 2) &&
         read_word(head + 12) == 512 && read_word(head + 16) == app->files[0].bytes &&
         !memcmp(head + 24, app->id, strlen(app->id) + 1) &&
-        ((flags & 8u) ? read_word(head + 160) == app->count - 1 && read_word(head + 164) == companions
-                      : app->count == 1);
+        valid_companions(head, app);
 }
 
 static bool read_receipt(const char *directory, const Package *wanted, const char *file, App *receipt) {
@@ -816,12 +850,22 @@ static bool stage_write(void *context, const void *bytes, size_t count) {
     return true;
 }
 
-static bool stage_github(const Package *package, const char *stage, Progress progress, char out[STORE_MESSAGE]) {
+static bool stage_github(const Package *package, unsigned index, const char *stage, Progress progress,
+                         uint64_t done, uint64_t total, char out[STORE_MESSAGE]) {
+    const PackageFile *file = &package->files[index];
+    char asset_url[RELEASE_URL_MAX];
+    const char *url = package->release_url;
+    if (index) {
+        const char *name = strrchr(url, '/') + 1;
+        int length = snprintf(asset_url, sizeof asset_url, "%.*s%s", (int)(name - url), url, file->name);
+        if (length < 0 || (size_t)length >= sizeof asset_url)
+            return message(out, "The GitHub resource URL is too long.");
+        url = asset_url;
+    }
     FILE *output = open_new(stage);
     if (!output) return message(out, "Could not open a temporary file on SD.");
-    const PackageFile *file = &package->files[0];
-    DownloadStage transfer = {.output = output, .progress = progress, .total = file->bytes};
-    bool ok = github_download(package->release_url, file->bytes, stage_write, &transfer, progress.cancel, out);
+    DownloadStage transfer = {.output = output, .progress = progress, .done = done, .total = total};
+    bool ok = github_download(url, file->bytes, stage_write, &transfer, progress.cancel, out);
     if (transfer.write_failed || (ok && !flush(output))) ok = message(out, "Could not write the download to SD.");
     if (fclose(output) && ok) ok = message(out, "Could not finish writing the download to SD.");
     if (ok && !matches(stage, file)) ok = message(out, "The download failed its SHA-256 check.");
@@ -891,7 +935,7 @@ static void cleanup_old(const char *directory, const Package *previous, const Pa
 bool store_install(const Store *store, const App *app, Progress progress, char out[STORE_MESSAGE]) {
     Package package = app->package;
 #ifdef IZ_STORE_STANDALONE
-    if (package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZlauncher.");
+    if (package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZ2S.");
 #endif
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], stage[STORE_PATH], base[STORE_PATH];
     module_paths(store, &package, directory, active, backup);
@@ -920,7 +964,7 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
     path(payload, "%s" STORE_DIR "/payloads/%s/%s", store->root, package.id, package.files[0].digest);
     path(source, "%s/%s", payload, package.files[0].name);
     if (package.release_url[0]) {
-        if (!stage_github(&package, stage, progress, out)) return false;
+        if (!stage_github(&package, 0, stage, progress, 0, total, out)) return false;
     } else if (!stage_file(source, stage, &package.files[0], progress, 0, total))
         return message(out, "The local package is missing, damaged, or SD is full.");
     if (cancelled(progress)) { unlink(stage); return message(out, "Download cancelled."); }
@@ -944,10 +988,17 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
             if (!matches(target, file)) { failure = "An installed resource failed its checksum."; break; }
             if (owns(&old.package, file->name)) package.owned |= UINT32_C(1) << i;
         } else {
-            path(source, "%s/%s", payload, file->name);
-            if (!stage_file(source, copy, file, progress, done, total)) {
-                failure = "A local resource is missing, damaged, or SD is full.";
-                break;
+            if (package.release_url[0]) {
+                if (!stage_github(&package, i, copy, progress, done, total, out)) {
+                    failure = out;
+                    break;
+                }
+            } else {
+                path(source, "%s/%s", payload, file->name);
+                if (!stage_file(source, copy, file, progress, done, total)) {
+                    failure = "A local resource is missing, damaged, or SD is full.";
+                    break;
+                }
             }
             if (rename(copy, target)) { failure = "Could not publish the verified resource."; break; }
             added |= UINT32_C(1) << i;
@@ -967,7 +1018,7 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
         if (file_state(copy) == REGULAR) unlink(copy);
         unlink(stage);
         commit(directory);
-        return message(out, failure);
+        return failure == out ? false : message(out, failure);
     }
     if (exists && (rename(active, backup) || !commit(directory)))
         return message(out, "Could not keep the previous version.");
@@ -984,7 +1035,7 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
 
 bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
 #ifdef IZ_STORE_STANDALONE
-    if (app->package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZlauncher.");
+    if (app->package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZ2S.");
 #endif
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH];
     module_paths(store, &app->package, directory, active, backup);

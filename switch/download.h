@@ -11,7 +11,7 @@
 
 typedef bool (*DownloadSink)(void *, const void *, size_t);
 
-bool github_release_url(const char *url);
+bool github_release_url(const char *url, const char *extension);
 bool catalog_url(const char *url);
 bool github_probe(const char *url, char message[DOWNLOAD_MESSAGE]);
 bool catalog_download(const char *url, uint64_t limit, DownloadSink sink, void *context,
