@@ -10,6 +10,7 @@
 #define STORE_MAX_FILES 17
 #define STORE_PATH 512
 #define STORE_MESSAGE 160
+#define STORE_ICON_SIZE 96
 #define STORE_DIR "/iz2s/iz2s-store"
 #define MODULE_DIR "/iz2s/modules"
 
@@ -57,6 +58,9 @@ bool store_load(Store *store, const char *root, char message[STORE_MESSAGE]);
 void store_settings_read(const char *root, StoreSettings *settings);
 bool store_settings_write(const char *root, const StoreSettings *settings, char message[STORE_MESSAGE]);
 bool store_fetch_list(Store *store, const StoreSettings *settings, char message[STORE_MESSAGE]);
+unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings);
+uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
+                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]);
 void store_refresh(const Store *store, App *app);
 void store_sync_icon(const Store *store, const App *app, const char *artwork);
 void store_sync_icon_pixels(const Store *store, const App *app, const void *rgba);

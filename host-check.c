@@ -32,6 +32,10 @@ int main(int argc, char **argv) {
     }
     View view = {0};
     store_settings_read(store.root, &view.settings);
+    if (!strcmp(command, "artwork")) {
+        printf("%u\n", store_read_artwork(&store, &view.settings, NULL));
+        return 0;
+    }
     const char *art = getenv("IZ_STORE_TEST_ARTWORK");
     for (unsigned i = 0; i < store.count; ++i) {
         store_refresh(&store, &store.apps[i]);

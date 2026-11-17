@@ -351,11 +351,11 @@ static void dialog(Canvas *canvas, const App *app, const View *view) {
     if (!view->busy && view->screen == CATALOG_INFO) {
         rounded(canvas,102,80,1076,532,16,panel,bar);
         label(canvas,132,105,1016,MEDIUM,ink,"Download catalog");
-        label(canvas,132,155,1016,NORMAL,muted,"Publish catalog.tsv in a GitHub repository or on your LAN web server.");
+        label(canvas,132,155,1016,NORMAL,muted,"Publish catalog.tsv and artwork.bin in the same directory.");
         label(canvas,132,190,1016,NORMAL,muted,"Enter its raw GitHub HTTPS URL or private LAN HTTP URL in Catalog URL.");
         label(canvas,132,235,1016,SMALL,dim,"Download from");
         wrap(canvas,132,270,1016,8,SMALL,ink,view->settings.url[0] ? view->settings.url : "Set Catalog URL in Settings first.");
-        label(canvas,132,490,1016,SMALL,muted,"Saved to /iz2s/iz2s-store/remote.tsv and loaded automatically on the next launch.");
+        label(canvas,132,490,1016,SMALL,muted,"The catalog and thumbnails are saved on SD for offline browsing.");
         if (view->settings.url[0]) action_button(canvas,660,549,235,"A","Download",true);
         action_button(canvas,920,549,225,"B","Back",false);
         return;
@@ -725,6 +725,7 @@ bool artwork_open(Artwork *art, const char *folder) {
 
 void artwork_update(Artwork *art, const char *folder, const Store *store) {
     for (unsigned i = 0; i < store->count; ++i) {
+        if (art->loaded[i]) continue;
         char path[STORE_PATH];
         if (snprintf(path,sizeof path,"%s/icons/%s.rgba",folder,store->apps[i].package.id) >= (int)sizeof path) continue;
         FILE *file = fopen(path,"rb");

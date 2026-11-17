@@ -39,7 +39,8 @@ static bool hash_close(Hash *hash, uint8_t *digest) {
 
 static const char signature[] = "IZSTORE1";
 enum { BLOCK_SIZE = 128 * 1024 };
-enum { ICON_BYTES = 96 * 96 * 4 };
+enum { ICON_BYTES = STORE_ICON_SIZE * STORE_ICON_SIZE * 4, ICON_ID_BYTES = 48 };
+static const char artwork_signature[] = "IZART1\n";
 typedef enum { ABSENT, REGULAR, OTHER } FileState;
 
 #ifdef IZ_STORE_STANDALONE
@@ -605,6 +606,82 @@ static bool catalog_sink(void *context, const void *bytes, size_t count) {
     return fwrite(bytes, 1, count, context) == count;
 }
 
+static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
+                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
+    char line[768], magic[sizeof artwork_signature - 1];
+    if (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url) ||
+        fread(magic, 1, sizeof magic, file) != sizeof magic ||
+        memcmp(magic, artwork_signature, sizeof magic)) return 0;
+    int count = fgetc(file);
+    if (count < 1 || count > STORE_MAX_APPS) return 0;
+    struct stat info;
+    long start = ftell(file);
+    if (start < 0 || fstat(fileno(file), &info) ||
+        info.st_size != start + count * (ICON_ID_BYTES + ICON_BYTES)) return 0;
+    uint32_t slots = 0;
+    for (int item = 0; item < count; ++item) {
+        char id[ICON_ID_BYTES];
+        if (fread(id, 1, sizeof id, file) != sizeof id ||
+            !memchr(id, 0, sizeof id) || !identifier(id)) return 0;
+        unsigned slot = 0;
+        while (slot < store->count && strcmp(store->apps[slot].package.id, id)) ++slot;
+        if (slot == store->count) {
+            if (fseek(file, ICON_BYTES, SEEK_CUR)) return 0;
+            continue;
+        }
+        if (slots & (1u << slot)) return 0;
+        if (pixels ? fread(pixels[slot], 1, ICON_BYTES, file) != ICON_BYTES :
+                     fseek(file, ICON_BYTES, SEEK_CUR) != 0) return 0;
+        slots |= 1u << slot;
+    }
+    return slots;
+}
+
+uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
+                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
+    char name[STORE_PATH];
+    if (!store->remote_count || !settings->url[0] ||
+        !path(name, "%s" STORE_DIR "/remote-artwork.bin", store->root)) return 0;
+    FILE *file = control_read(name);
+    if (!file) return 0;
+    uint32_t slots = read_artwork(file, store, settings->url, pixels);
+    fclose(file);
+    return slots;
+}
+
+unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings) {
+    char url[RELEASE_URL_MAX], directory[STORE_PATH], stage[STORE_PATH], name[STORE_PATH];
+    const char *end = strchr(settings->url, '?');
+    if (!end) end = settings->url + strlen(settings->url);
+    const char *slash = end;
+    while (slash > settings->url && slash[-1] != '/') --slash;
+    if (!store->remote_count || !catalog_url(settings->url) ||
+        snprintf(url, sizeof url, "%.*sartwork.bin", (int)(slash-settings->url), settings->url) >= (int)sizeof url ||
+        !path(directory, "%s" STORE_DIR, store->root) ||
+        !path(stage, "%s/.artwork.tmp", directory) ||
+        !path(name, "%s/remote-artwork.bin", directory)) return 0;
+    if (file_state(stage) == REGULAR && unlink(stage)) return 0;
+    FILE *file = open_new(stage);
+    if (!file) return 0;
+    char error[DOWNLOAD_MESSAGE];
+    bool ok = fprintf(file, "%s\n", settings->url) > 0 &&
+        catalog_download(url, sizeof artwork_signature + STORE_MAX_APPS * (ICON_ID_BYTES + ICON_BYTES),
+                         catalog_sink, file, error) && flush(file);
+    if (fclose(file)) ok = false;
+    uint32_t slots = 0;
+    if (ok && (file = fopen(stage, "rb")) != NULL) {
+        slots = read_artwork(file, store, settings->url, NULL);
+        fclose(file);
+    }
+    if (!slots || !control_publish(stage, name, directory)) {
+        unlink(stage);
+        return 0;
+    }
+    unsigned count = 0;
+    for (; slots; slots &= slots - 1) ++count;
+    return count;
+}
+
 bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STORE_MESSAGE]) {
     char directory[STORE_PATH], stage[STORE_PATH], name[STORE_PATH], root[STORE_PATH];
     if (!settings->url[0]) return message(out, "Enter a catalog URL first.");
@@ -632,7 +709,12 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
     }
     if (ok && !control_publish(stage, name, directory)) ok = message(out, "Could not publish the catalog on SD.");
     if (!ok) { unlink(stage); return false; }
-    snprintf(out, STORE_MESSAGE, "Catalog updated: %u online entries.", store->remote_count);
+    unsigned thumbnails = store_fetch_artwork(store, settings);
+    if (thumbnails)
+        snprintf(out, STORE_MESSAGE, "Catalog updated: %u online entries, %u thumbnail%s.",
+                 store->remote_count, thumbnails, thumbnails == 1 ? "" : "s");
+    else
+        snprintf(out, STORE_MESSAGE, "Catalog updated: %u online entries. No new thumbnails received.", store->remote_count);
     return true;
 }
 

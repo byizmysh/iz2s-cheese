@@ -98,7 +98,12 @@ static void run_task(void *context) {
     Task *task = context;
     if (task->command == REFRESH) {
         task->ok = store_load(task->result, SD_ROOT, task->message);
-        if (task->ok) refresh_apps(task->result);
+        if (task->ok) {
+            refresh_apps(task->result);
+            if (task->result->remote_count &&
+                !store_read_artwork(task->result, &task->settings, NULL))
+                store_fetch_artwork(task->result, &task->settings);
+        }
         network_status(task);
     } else if (task->command == FETCH_LIST || task->command == STARTUP_CHECK || task->command == CHECK_NETWORK) {
         network_status(task);
@@ -154,7 +159,7 @@ static bool start_task(Task *task, Thread *thread, View *view, const Store *stor
     else snprintf(view->message, sizeof view->message, "%s",
         command == REFRESH ? "Reading the local catalog..." :
         command == REMOVE ? "Removing the application..." :
-        command == FETCH_LIST ? "Fetching the catalog..." :
+        command == FETCH_LIST ? "Fetching catalog and thumbnails..." :
         command == CHECK_NETWORK || command == STARTUP_CHECK ? "Checking the network..." :
         task->app && task->app->package.release_url[0] ? "Downloading" :
         "Copying and verifying files...");
@@ -208,10 +213,13 @@ typedef struct {
 } Session;
 
 static void sync_artwork(Session *session, Store *store) {
-    memset(artwork.loaded, 0, sizeof artwork.loaded);
+    uint32_t online = store_read_artwork(store, &session->view.settings, artwork.icons);
+    for (unsigned i = 0; i < STORE_MAX_APPS; ++i)
+        artwork.loaded[i] = (online & (1u << i)) != 0;
     if (session->art_records) {
         const size_t record_size = 48 + sizeof artwork.icons[0];
-        for (unsigned i = 0; i < store->count; ++i)
+        for (unsigned i = 0; i < store->count; ++i) {
+            if (artwork.loaded[i]) continue;
             for (unsigned j = 0; j < session->art_count; ++j) {
                 const unsigned char *record = session->art_records + record_size * j;
                 if (strncmp((const char *)record, store->apps[i].package.id, 48)) continue;
@@ -219,6 +227,7 @@ static void sync_artwork(Session *session, Store *store) {
                 artwork.loaded[i] = true;
                 break;
             }
+        }
     }
     char folder[STORE_PATH];
     int length = snprintf(folder, sizeof folder, "%s" STORE_DIR, store->root);
@@ -290,7 +299,10 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
         command = NO_JOB;
     }
     if (command == EXIT) return false;
-    if (command == EDIT_URL) command = edit_catalog_url(view) ? REFRESH : NO_JOB;
+    if (command == EDIT_URL) {
+        command = NO_JOB;
+        if (edit_catalog_url(view)) command = view->settings.url[0] ? FETCH_LIST : REFRESH;
+    }
     if (command != NO_JOB && !view->busy)
         start_task(task, &session->thread, view, store, &catalogs[session->active ^ 1u], command);
     if (pressed || (touching && !session->touched) || command != NO_JOB) session->dirty = true;

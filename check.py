@@ -46,11 +46,13 @@ with TemporaryDirectory(prefix='iz-store-check-') as directory:
 #include "download.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
                              void *context, char out[DOWNLOAD_MESSAGE]) {
-    (void)url;
-    FILE *file = fopen(getenv("IZ_STORE_TEST_CATALOG"), "rb");
+    const char *name = strrchr(url, '/');
+    FILE *file = fopen(getenv(name && !strcmp(name, "/artwork.bin") ?
+                             "IZ_STORE_TEST_ARTWORK_PACK" : "IZ_STORE_TEST_CATALOG"), "rb");
     if (!file) return false;
     unsigned char data[1024];
     size_t count;
@@ -67,6 +69,7 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
 ''')
     url = 'https://raw.githubusercontent.com/example/store-feed/main/catalog.tsv'
     source = work / 'feed.tsv'
+    artwork = work / 'artwork.bin'
     external = os.environ.get('IZ_STORE_CHECK_CATALOG')
     initial = Path(external).read_text() if external else (
         'IZSTORE2\napp\tsample\tnro\t1.0\tSample app\tExample\tTools\tSample application.\n'
@@ -75,6 +78,7 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
     )
     app_ids = [line.split('\t')[1] for line in initial.splitlines() if line.startswith('app\t')]
     assert app_ids
+    image_pack = b'IZART1\n\x01' + app_ids[0].encode().ljust(48, b'\0') + b'\xff' * (96 * 96 * 4)
     for standalone in (False, True):
         binary = work / 'host-check'
         sd = work / ('sd-nro' if standalone else 'sd-iza')
@@ -89,23 +93,33 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
 
         def run(*args, code=0):
             result = subprocess.run([binary, sd, *args], capture_output=True, text=True,
-                                    env={**os.environ, 'IZ_STORE_TEST_CATALOG': str(source)})
+                                    env={**os.environ, 'IZ_STORE_TEST_CATALOG': str(source),
+                                         'IZ_STORE_TEST_ARTWORK_PACK': str(artwork)})
             assert result.returncode == code, (args, result.stdout, result.stderr)
             return result.stdout
 
         source.write_text(initial)
+        artwork.write_bytes(image_pack)
         assert not run('list')
         assert not (sd / 'iz2s').exists()
-        assert f'{len(app_ids)} online entries' in run('fetch-list', url)
+        assert f'{len(app_ids)} online entries, 1 thumbnail.' in run('fetch-list', url)
         cache = sd / 'iz2s/iz2s-store/remote.tsv'
         assert cache.read_text() == url + '\n' + initial
         assert [line.split('\t')[0] for line in run('list').splitlines()] == app_ids
+        assert run('artwork').strip() == '1'
+        artwork_cache = cache.with_name('remote-artwork.bin')
+        assert artwork_cache.read_bytes() == url.encode() + b'\n' + image_pack
+        artwork.write_bytes(image_pack[:-1])
+        assert 'No new thumbnails' in run('fetch-list', url)
+        assert artwork_cache.read_bytes() == url.encode() + b'\n' + image_pack
+        assert run('artwork').strip() == '1'
         source.write_text('IZSTORE2\ninvalid\n')
         assert 'Invalid list' in run('fetch-list', url, code=1)
         assert cache.read_text() == url + '\n' + initial
         assert len(run('list').splitlines()) == len(app_ids)
         assert 'Enter a catalog URL' in run('fetch-list', '', code=1)
         assert not run('list')
+        assert run('artwork').strip() == '0'
         (cache.parent / 'catalog.tsv').write_text(initial)
         assert len(run('list').splitlines()) == len(app_ids)
         legacy = sd / 'iz2s/store'
