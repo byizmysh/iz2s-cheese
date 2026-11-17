@@ -15,36 +15,36 @@ output = Path(sys.argv[1])
 check_iza, check_nro = (value == '1' for value in sys.argv[2:])
 
 if check_iza:
-    entry = 'iz2s/modules/iz2s-store/launcher.iza'
-    with ZipFile(output / 'iz2s-store-iza-sd.zip') as archive:
-        bundle = json.loads(archive.read('iz2s/modules/iz2s-store/sd-bundle.json'))
+    entry = 'iz2s/modules/iz2s-cheese/launcher.iza'
+    with ZipFile(output / 'iz2s-cheese-iza-sd.zip') as archive:
+        bundle = json.loads(archive.read('iz2s/modules/iz2s-cheese/sd-bundle.json'))
         companions = bundle['assets']
         assert len(companions) == 1
-        assert set(archive.namelist()) == {entry, 'iz2s/modules/iz2s-store/sd-bundle.json',
-            *('iz2s/modules/iz2s-store/' + item['file'] for item in companions)}
+        assert set(archive.namelist()) == {entry, 'iz2s/modules/iz2s-cheese/sd-bundle.json',
+            *('iz2s/modules/iz2s-cheese/' + item['file'] for item in companions)}
         for item in companions:
-            engine = archive.read('iz2s/modules/iz2s-store/' + item['file'])
+            engine = archive.read('iz2s/modules/iz2s-cheese/' + item['file'])
             assert len(engine) == item['bytes'] and hashlib.sha256(engine).hexdigest() == item['sha256']
             assert engine.startswith(b'IZNATRL1')
-            assert b'sb4IZ2SStoreEvent' not in engine
+            assert b'sb4IZ2SCheeseEvent' not in engine
             assert b'sb4NativeServicesVersion' not in engine
             assert b'sslConnectionDoHandshake' in engine and b'swkbdShow' in engine
         iza = archive.read(entry)
         assert bundle['launcher']['sha256'] == hashlib.sha256(iza).hexdigest()
-        assert b'sb4IZ2SStoreEvent' not in iza
+        assert b'sb4IZ2SCheeseEvent' not in iza
         assert b'sb4NativeServicesVersion' not in iza
-    assert iza == (output / 'iz2s-store.iza').read_bytes()
+    assert iza == (output / 'iz2s-cheese.iza').read_bytes()
     assert iza.startswith(b'IZSDAPP1')
     artwork = iza.index(b'IZSTOREA')
     assert iza[artwork + 8] == 0
     assert b'IZSTORE2\napp\t' not in iza
 
 if check_nro:
-    entry = 'switch/iz2s-store/iz2s-store.nro'
-    with ZipFile(output / 'iz2s-store-nro-sd.zip') as archive:
+    entry = 'switch/iz2s-cheese/iz2s-cheese.nro'
+    with ZipFile(output / 'iz2s-cheese-nro-sd.zip') as archive:
         assert archive.namelist() == [entry]
         nro = archive.read(entry)
-    assert nro == (output / 'iz2s-store.nro').read_bytes()
+    assert nro == (output / 'iz2s-cheese.nro').read_bytes()
     assert nro[16:20] == b'NRO0'
     mod = struct.unpack_from('<I', nro, 4)[0]
     assert nro[mod:mod+4] == b'MOD0' and b'OUN0\x02\0\0\0\x01\0\0\0' in nro[mod:mod+128]
@@ -177,7 +177,7 @@ bool __wrap_github_download(const char *url, uint64_t size, DownloadSink sink, v
         assert not run('list')
         assert not (sd / 'iz2s').exists()
         assert f'{len(app_ids)} online entries, 1 thumbnail.' in run('fetch-list', url)
-        cache = sd / 'iz2s/iz2s-store/remote.tsv'
+        cache = sd / 'iz2s/iz2s-cheese/remote.tsv'
         assert cache.read_text() == url + '\n' + initial
         assert [line.split('\t')[0] for line in run('list').splitlines()] == app_ids
         assert run('artwork').strip() == '1'
@@ -196,14 +196,6 @@ bool __wrap_github_download(const char *url, uint64_t size, DownloadSink sink, v
         assert run('artwork').strip() == '0'
         (cache.parent / 'catalog.tsv').write_text(initial)
         assert len(run('list').splitlines()) == len(app_ids)
-        legacy = sd / 'iz2s/store'
-        cache.parent.rename(legacy)
-        assert len(run('list').splitlines()) == len(app_ids)
-        assert cache.read_text() == url + '\n' + initial and not legacy.exists()
-        legacy.mkdir()
-        (legacy / 'catalog.tsv').write_text('Do not overwrite the active catalog.')
-        assert len(run('list').splitlines()) == len(app_ids)
-        assert (legacy / 'catalog.tsv').is_file()
         cache.unlink()
         artwork_cache.unlink()
         (cache.parent / 'settings.txt').write_text(url + '\n')
@@ -218,7 +210,7 @@ bool __wrap_github_download(const char *url, uint64_t size, DownloadSink sink, v
         artwork.unlink()
         assert not run('refresh').strip()
         assert run('artwork').strip() == '1'
-        active = sd / ('switch/iz2s-store/catalog' if standalone else 'iz2s/modules/iz2s-store/catalog')
+        active = sd / ('switch/iz2s-cheese/catalog' if standalone else 'iz2s/modules/iz2s-cheese/catalog')
         active.mkdir(parents=True)
         local_id = 'sd-fixture'
         local = ('IZSTORE2\napp\tsd-fixture\tnro\t1.0\tSD App\tExample\tTools\tTest.\n'
@@ -244,7 +236,7 @@ bool __wrap_github_download(const char *url, uint64_t size, DownloadSink sink, v
         assert run('installed').splitlines() == [local_id]
         icon = int(run('icon', local_id), 16)
         assert icon >> 24 == 255 and icon & 255 >= 250
-        (install_root / local_id / '.izstore-icon.rgba').write_bytes(b'\x00\xff\x00\xff' * (96 * 96))
+        (install_root / local_id / '.izcheese-icon.rgba').write_bytes(b'\x00\xff\x00\xff' * (96 * 96))
         assert run('icon', local_id).strip() == 'ff00ff00'
 
         source.write_text(mixed_nro + online_iza('1.0', {}))

@@ -9,7 +9,8 @@ static bool damage;
 bool __wrap_github_download(const char *url,uint64_t size,DownloadSink sink,void *context,
                            const atomic_bool *cancel,char out[DOWNLOAD_MESSAGE]) {
     (void)out;
-    assert(!strncmp(url,"https://github.com/byizmysh/iz2s-store/releases/download/v0.8.0/",62));
+    const char prefix[] = "https://github.com/byizmysh/iz2s-cheese/releases/download/v0.8.0/";
+    assert(!strncmp(url, prefix, sizeof prefix - 1));
     const char *file=strrchr(url,'/');assert(file);
     char path[1024];snprintf(path,sizeof path,"%s%s",getenv("STORE_TEST_RELEASE"),file);
     FILE *source=fopen(path,"rb");assert(source);
@@ -26,13 +27,13 @@ int main(int argc,char **argv) {
     assert(store_load(&store,argv[1],message)&&store.count==1);
     App *app=&store.apps[0];assert(app==store_self_entry(&store));
 #ifdef IZ_STORE_STANDALONE
-    store_set_running_nro("sdmc:/switch/iz2s-store/iz2s-store.nro","0.8.1");
+    store_set_running_nro("sdmc:/switch/iz2s-cheese/iz2s-cheese.nro","0.8.1");
 #else
     store_set_running_iza("0.8.1");
 #endif
     store_refresh(&store,app);assert(app->state==SELF_ENTRY);
 #ifdef IZ_STORE_STANDALONE
-    store_set_running_nro("sdmc:/switch/iz2s-store/iz2s-store.nro","0.8.0");
+    store_set_running_nro("sdmc:/switch/iz2s-cheese/iz2s-cheese.nro","0.8.0");
 #else
     store_set_running_iza("0.8.0");
 #endif
@@ -41,7 +42,7 @@ int main(int argc,char **argv) {
     assert(!store_remove(&store,app,message));
     damage=true;assert(!store_install(&store,app,(Progress){0},message));assert(strstr(message,"SHA-256"));
     damage=false;atomic_bool cancel=true;assert(!store_install(&store,app,(Progress){.cancel=&cancel},message));
-    assert(store_install(&store,app,(Progress){0},message));assert(strstr(message,"Reopen IZ2S Store"));
+    assert(store_install(&store,app,(Progress){0},message));assert(strstr(message,"Reopen IZ2S Cheese"));
     store_refresh(&store,app);assert(app->state==SELF_ENTRY);
     assert(!store_install(&store,app,(Progress){0},message));
     puts("Store self-update: same version, checksum failure, cancellation, removal guard, downgrade guard PASS");

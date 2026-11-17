@@ -8,7 +8,7 @@ import tempfile
 
 module = Path(__file__).resolve().parent.parent
 release = Path(sys.argv[1]).resolve()
-program = (release / 'iz2s-store.nro').read_bytes()
+program = (release / 'iz2s-cheese.nro').read_bytes()
 digest = hashlib.sha256(program).hexdigest()
 with tempfile.TemporaryDirectory(prefix='store-nro-icons-') as folder:
     work = Path(folder)
@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='store-nro-icons-') as folder:
         '-lssl', '-lcrypto', '-o', binary,
     ], check=True)
     sd = work / 'sd'
-    config = sd / 'iz2s/iz2s-store'
+    config = sd / 'iz2s/iz2s-cheese'
     payload = config / 'payloads/sample' / digest / 'launcher.nro'
     payload.parent.mkdir(parents=True)
     payload.write_bytes(program)
@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='store-nro-icons-') as folder:
         f'file\t{len(program)}\t{digest}\tlauncher.nro\n'
     )
     subprocess.run([binary, sd, 'raw-install', 'sample'], check=True)
-    icon = sd / 'iz2s/modules/sample/.izstore-icon.rgba'
+    icon = sd / 'iz2s/modules/sample/.izcheese-icon.rgba'
     pixels = icon.read_bytes()
     assert len(pixels) == 96 * 96 * 4 and len(set(pixels)) > 4
     subprocess.run([binary, sd, 'raw-remove', 'sample'], check=True)

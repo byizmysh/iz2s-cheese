@@ -13,7 +13,7 @@ clang --target=aarch64-linux-gnu --sysroot="$IZ_LINUX_SYSROOT" -fuse-ld=lld \
     -Wl,--no-as-needed "$IZ_LINUX_SYSROOT/lib/libc.so.6" "$IZ_LINUX_SYSROOT/lib/libgcc_s.so.1" \
     "$IZ_LINUX_SYSROOT/lib/libc_nonshared.a" "$IZ_LINUX_SYSROOT/lib/ld-linux-aarch64.so.1" \
     "$IZ_LINUX_SYSROOT/lib/crtn.o" -Wl,--dynamic-linker=/lib/ld-linux-aarch64.so.1 -o "$work/test"
-python3 - "$release/iz2s-store-iza-sd.zip" "$work" <<'PY'
+python3 - "$release/iz2s-cheese-iza-sd.zip" "$work" <<'PY'
 from pathlib import Path
 import sys
 from zipfile import ZipFile

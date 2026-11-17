@@ -25,7 +25,6 @@ int main(int argc, char **argv) {
     if (argc < 3) return 2;
     const char *command = argv[2];
     char message[STORE_MESSAGE];
-    store_migrate(argv[1]);
     if (!store_load(&store, argv[1], message)) {
         fprintf(stderr,"%s\n",message);
         return 1;

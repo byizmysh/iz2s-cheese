@@ -78,7 +78,7 @@ static bool check_github(Task *task) {
 static void write_report(const Task *task, const char *catalog) {
     FILE *file = fopen(CHECK_REPORT, "w");
     if (!file) return;
-    bool ok = fprintf(file, "IZ2S Store network check\nNetwork: %s\n%s\nGitHub: %s\nCatalog URL: %s\nCatalog: %s\n",
+    bool ok = fprintf(file, "IZ2S Cheese network check\nNetwork: %s\n%s\nGitHub: %s\nCatalog URL: %s\nCatalog: %s\n",
         task->network, task->addresses, task->github, task->settings.url, catalog) > 0;
     if (fclose(file)) ok = false;
     if (ok && R_SUCCEEDED(fsdevCommitDevice("sdmc")) && task->command == STARTUP_CHECK) {
@@ -276,7 +276,6 @@ static void load_artwork(Session *session, const Store *store) {
 static void open_session(Session *session, bool hosted) {
     for (unsigned i = 0; i < 2; ++i) store_clear(&catalogs[i]);
     session->view.inside_iz2s = hosted;
-    store_migrate(SD_ROOT);
     session->check_on_start = access(CHECK_REQUEST, F_OK) == 0;
     session->dirty = true;
     store_settings_read(SD_ROOT, &session->view.settings);
@@ -321,7 +320,7 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
             view->screen = SETTINGS_RESULT;
             snprintf(view->result_title, sizeof view->result_title, "%s",
                 task->command == CHECK_NETWORK ? "GitHub connection test" :
-                task->command == UPDATE_STORE ? "Store update" : "Catalog download");
+                task->command == UPDATE_STORE ? "Cheese update" : "Catalog download");
         }
         if (session->check_on_start && task->command == REFRESH) {
             session->check_on_start = false;

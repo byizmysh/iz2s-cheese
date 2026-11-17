@@ -2,9 +2,9 @@
   "format": "izlauncher.module",
   "formatVersion": 1,
   "apiVersion": 1,
-  "id": "iz2s-store",
-  "installationDirectory": "iz2s-store",
-  "name": "IZ2S Store",
+  "id": "iz2s-cheese",
+  "installationDirectory": "iz2s-cheese",
+  "name": "IZ2S Cheese",
   "version": "0.8.0",
   "moduleVersion": "0.8.0",
   "author": "IZMYSH",
@@ -29,7 +29,7 @@
       "switch/iza/assets/icon.png",
       "switch/iza/assets/state.bin",
       "switch/iza/assets/data.bin",
-      "switch/iza/asset-8f503b70163c3fdc9d988f327a621e3771ec0f83e50e746b9006d135fe087831.izdata"
+      "switch/iza/asset-c6891007c193ecd89f79cc6cbeec2e4db9ee3862af4266967a155dd0324e549c.izdata"
     ]
   },
   "dependencies": [],

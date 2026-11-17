@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='store-catalog-size-') as folder:
         module/'tests/catalog-size.c',*(module/'switch'/x for x in ['store.c','ui.c','download.c','installed-artwork.c']),
         '-lssl','-lcrypto','-o',binary],check=True)
     for count, legacy in [(25, True), (33, True), (256, False), (1024, False)]:
-        sd=work/'sd'; catalog=sd/'iz2s/modules/iz2s-store/catalog';catalog.mkdir(parents=True,exist_ok=True)
+        sd=work/'sd'; catalog=sd/'iz2s/modules/iz2s-cheese/catalog';catalog.mkdir(parents=True,exist_ok=True)
         rows=['IZSTORE2']
         with (catalog/'artwork.bin').open('wb') as art:
             art.write((b'IZART1\n'+bytes([count])) if legacy else (b'IZART2\n'+struct.pack('<I',count)))

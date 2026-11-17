@@ -15,7 +15,7 @@ Keep the records for each app together in this order. A mixed IZA and NRO catalo
 
 Use an autonomous `.iza` for IZ2S. The catalog ID must match the ID inside the launcher. Publish the launcher and any companions in the same tagged GitHub Release. Use the names from the package’s `sd-bundle.json` for companion files.
 
-Write one `file` row for `launcher.iza`, followed by one `file` row per `asset-<sha256>.izdata` companion. Put the `github` row last and point it to the `.iza` release asset. The Store downloads the companions by their exact names from the same release.
+Write one `file` row for `launcher.iza`, followed by one `file` row per `asset-<sha256>.izdata` companion. Put the `github` row last and point it to the `.iza` release asset. IZ2S Cheese downloads the companions by their exact names from the same release.
 
 For an IZA with no companion files, the rows look like this. Replace the placeholders with the actual size and SHA-256, and use literal tab separators.
 
@@ -41,12 +41,12 @@ any required `asset-<sha256>.izdata` companions as additional `file` rows.
 The IZA package ID must match the catalog ID.
 
 Place the files named by the `file` rows under
-`/iz2s/iz2s-store/payloads/<id>/<launcher-sha256>/` on microSD.
+`/iz2s/iz2s-cheese/payloads/<id>/<launcher-sha256>/` on microSD.
 Use the launcher's SHA-256 as the directory name. IZA packages are
-supported by the IZ2S edition of the Store.
+supported by the IZ2S edition of IZ2S Cheese.
 
 </details>
 
-## Store updates
+## Cheese updates
 
-Reserve `iz2s-store` for the Store itself. Use an official release URL of the form `https://github.com/byizmysh/iz2s-store/releases/download/v<VERSION>/iz2s-store.iza` or its `.nro` counterpart. A feed has unique app IDs, so publish a feed for each Store edition when including its self-update entry. IZA needs its companion `file` row; publish that exact `.izdata` asset in the same release. List sizes and SHA-256 from the actual release files, including same-version rebuilds. Updates are available from Settings; the Store cannot remove itself.
+Reserve `iz2s-cheese` for IZ2S Cheese itself. Use an official release URL of the form `https://github.com/byizmysh/iz2s-cheese/releases/download/v<VERSION>/iz2s-cheese.iza` or its `.nro` counterpart. A feed has unique app IDs, so publish a feed for each Store edition when including its self-update entry. IZA needs its companion `file` row; publish that exact `.izdata` asset in the same release. List sizes and SHA-256 from the actual release files, including same-version rebuilds. Updates are available from Settings; IZ2S Cheese cannot remove itself.

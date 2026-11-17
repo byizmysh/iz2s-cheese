@@ -1,4 +1,4 @@
-# Build IZ2S Store
+# Build IZ2S Cheese
 
 Set `IZ_DEVKITPRO` (or `DEVKITPRO`) to ounce-devkit 20261114 with libounce `9382b1ec48ac`. Install Node.js, Python, Pillow, `glslangValidator` and `spirv-val`. Set `IZ_STORE_FONT_DIR` to a directory containing DejaVu Sans regular and bold fonts.
 
@@ -11,13 +11,11 @@ For IZA, install the updated libsb4 headers alongside the devkitPro directory. S
 
 ## Native module
 
-`switch/iza/entry.c` loads the module-owned `asset-<sha256>.izdata` using the SDK image loader. The resource contains `main.c`, `store.c`, `ui.c`, `download.c` and the icon decoder. Their writable state is allocated with the image. The launcher also provides the embedded Store handler for older packages through
-`sb4IZ2SStoreEvent`. Independent images continue to execute their own Store code.
-Both IZA paths receive the required SDK functions through the Store service table.
+`switch/iza/entry.c` loads the module-owned `asset-<sha256>.izdata` using the SDK image loader. The resource contains `main.c`, `store.c`, `ui.c`, `download.c` and the icon decoder. Their writable state is allocated with the image. IZ2S Cheese executes its own application code and uses the launcher SDK for system services. The launcher must grant application I/O to the `iz2s-cheese` module ID.
 
-The image resolves the explicit imports in `switch/iza/imports.json` before running application code. Native services v1 uses the pinned libounce C ABI. Missing services fail before a worker starts, with `startup-error.txt` or `missing-sdk-import.txt` in the module folder. TLS certificate and hostname verification remain enabled. Shared launcher sockets are borrowed and never closed by the Store.
+The image resolves the explicit imports in `switch/iza/imports.json` before running application code. Native services v1 uses the pinned libounce C ABI. Missing services fail before a worker starts, with `startup-error.txt` or `missing-sdk-import.txt` in the module folder. TLS certificate and hostname verification remain enabled. Shared launcher sockets are borrowed and never closed by IZ2S Cheese.
 
-The existing launcher policy grants this installer process-level SD I/O. This does not grant general modules whole-SD access or change the separate scoped storage API. SDK network, TLS, keyboard, input and thread functions are reusable by other applications; they contain no Store logic.
+The existing launcher policy grants this installer process-level SD I/O. This does not grant general modules whole-SD access or change the separate scoped storage API. SDK network, TLS, keyboard, input and thread functions are reusable by other applications; they contain no application logic.
 
 STOP cancels an active download and returns `STOP_PENDING` while the worker is alive. The module joins and closes the worker before unloading its image. Image resources and the previous executable are retained when updating the running IZA.
 

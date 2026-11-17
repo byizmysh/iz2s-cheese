@@ -159,20 +159,20 @@ static const char *state_name(const App *app) {
         case UPDATE_AVAILABLE: return "Update available";
         case EXTERNAL: return "Installed separately";
         case UNAVAILABLE: return "Folder conflict";
-        case SELF_ENTRY: return "IZ2S Store release";
+        case SELF_ENTRY: return "IZ2S Cheese release";
         default: return "Ready to download";
     }
 }
 
 static const char *primary(const App *app) {
-    if (!strcmp(app->package.id, "iz2s-store")) return NULL;
+    if (!strcmp(app->package.id, "iz2s-cheese")) return NULL;
     if (app->state == NOT_INSTALLED) return "Download";
     if (app->state == UPDATE_AVAILABLE) return "Update";
     return NULL;
 }
 
 static bool managed(const App *app) {
-    return strcmp(app->package.id, "iz2s-store") &&
+    return strcmp(app->package.id, "iz2s-cheese") &&
         (app->state == INSTALLED || app->state == UPDATE_AVAILABLE);
 }
 
@@ -318,11 +318,11 @@ static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,230,952,SMALL,dim,"Change Wi-Fi and DNS in HOME > System Settings > Internet.");
     const char *titles[SETTINGS_COUNT] = {view->settings.online ? "Catalog source: Online" : "Catalog source: SD card",
         "Catalog URL", view->settings.online ? "Download catalog" : "Reload SD catalog", "Test GitHub connection",
-        "Store update"};
+        "Cheese update"};
     const App *self = store_self_entry(store);
-    const char *update_status = !self ? "Load a catalog with an IZ2S Store entry" :
-        self->state == UPDATE_AVAILABLE ? "An official Store update is available" :
-        self->installed_version[0] ? "No newer Store version in this catalog" :
+    const char *update_status = !self ? "Load a catalog with an IZ2S Cheese entry" :
+        self->state == UPDATE_AVAILABLE ? "An official Cheese update is available" :
+        self->installed_version[0] ? "No newer Cheese version in this catalog" :
         "Use the official release to update this copy";
     char list_status[90];
     if (store->remote_count)
@@ -360,7 +360,7 @@ static void dialog(Canvas *canvas, const App *app, const View *view) {
         }
     if (view->screen == ABOUT) {
         rounded(canvas,220,114,840,472,16,panel,bar);
-        label(canvas,252,140,760,LARGE,ink,"IZ2S Store");
+        label(canvas,252,140,760,LARGE,ink,"IZ2S Cheese");
         label(canvas,252,200,760,NORMAL,muted,"Developer: IZMYSH");
         const char *const links[] = {"https://github.com/byizmysh", "https://github.com/byizmysh/IZ2S-Platform"};
         const char *const titles[] = {"Author", "Project"};
@@ -469,7 +469,7 @@ void view_draw(uint32_t *pixels, unsigned stride, const Artwork *art, const Stor
             memcpy(&pixels[(33+row)*stride+22],art->brand[row],sizeof art->brand[row]);
     if (view->compact && !art->brand_loaded) label(&canvas,25,36,46,MEDIUM,accent,"IZ");
     if (!view->compact) {
-        label(&canvas,76,38,124,NORMAL,ink,"IZ2S Store");
+        label(&canvas,76,38,138,NORMAL,ink,"IZ2S Cheese");
         label(&canvas,76,65,124,SMALL,dim,"Homebrew");
     }
     rounded(&canvas,24,110,rail-44,31,8,panel,panel);
@@ -598,11 +598,11 @@ static Command settings_action(View *view, const Store *store) {
         if (self && self->state == UPDATE_AVAILABLE) return UPDATE_STORE;
         view->screen = SETTINGS_RESULT;
         view->failure = false;
-        snprintf(view->result_title, sizeof view->result_title, "Store update");
+        snprintf(view->result_title, sizeof view->result_title, "Cheese update");
         snprintf(view->message, sizeof view->message, "%s",
-            !self ? "Load a catalog that contains an IZ2S Store entry." :
+            !self ? "Load a catalog that contains an IZ2S Cheese entry." :
             self->installed_version[0] ? "This catalog has no newer Store version." :
-            "Use the official release to update a nonstandard Store path.");
+            "Use the official release to update a nonstandard Cheese path.");
         return NO_JOB;
     }
     if (view->settings_row == 0) return TOGGLE_CATALOG_SOURCE;

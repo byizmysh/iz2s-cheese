@@ -25,10 +25,10 @@ for px, bold in ((16, False), (21, False), (26, True), (35, True)):
     font.extend(rasters)
 (romfs / 'font.bin').write_bytes(font)
 
-with Image.open(Path(__file__).with_name('brand') / 'store-icon.png') as source:
+with Image.open(Path(__file__).with_name('brand') / 'cheese-icon.png') as source:
     art = source.convert('RGB')
     art.save(icon, quality=97, subsampling=0)
     hardware_icon = art.resize((96, 96), Image.Resampling.LANCZOS).convert('RGBA')
     sidebar_icon = art.resize((44, 44), Image.Resampling.LANCZOS).convert('RGBA')
-    (romfs / 'store-icon.rgba').write_bytes(hardware_icon.tobytes())
+    (romfs / 'cheese-icon.rgba').write_bytes(hardware_icon.tobytes())
     (romfs / 'brand.rgba').write_bytes(sidebar_icon.tobytes())

@@ -8,20 +8,20 @@ with tempfile.TemporaryDirectory(prefix='store-self-update-') as name:
     work=Path(name)
     for kind in ['iza','nro']:
         sd=work/kind
-        folder=sd/('iz2s/modules/iz2s-store' if kind=='iza' else 'switch/iz2s-store')
+        folder=sd/('iz2s/modules/iz2s-cheese' if kind=='iza' else 'switch/iz2s-cheese')
         folder.mkdir(parents=True)
-        active=folder/('launcher.iza' if kind=='iza' else 'iz2s-store.nro')
+        active=folder/('launcher.iza' if kind=='iza' else 'iz2s-cheese.nro')
         previous=b'previous executable';active.write_bytes(previous)
-        catalog=sd/'iz2s/iz2s-store/catalog.tsv';catalog.parent.mkdir(parents=True)
-        program=release/f'iz2s-store.{kind}'
+        catalog=sd/'iz2s/iz2s-cheese/catalog.tsv';catalog.parent.mkdir(parents=True)
+        program=release/f'iz2s-cheese.{kind}'
         files=[('launcher.'+kind, program)]
         if kind=='iza':
-            with ZipFile(release/'iz2s-store-iza-sd.zip') as z:
+            with ZipFile(release/'iz2s-cheese-iza-sd.zip') as z:
                 for p in z.namelist():
                     if p.endswith('.izdata'):files.append((Path(p).name,release/Path(p).name))
-        rows=['IZSTORE2',f'app\tiz2s-store\t{kind}\t0.8.0\tIZ2S Store\tIZMYSH\tTools\tHomebrew store.']
+        rows=['IZSTORE2',f'app\tiz2s-cheese\t{kind}\t0.8.0\tIZ2S Cheese\tIZMYSH\tTools\tHomebrew store.']
         rows += [f'file\t{p.stat().st_size}\t{hashlib.sha256(p.read_bytes()).hexdigest()}\t{n}' for n,p in files]
-        rows += [f'github\thttps://github.com/byizmysh/iz2s-store/releases/download/v0.8.0/iz2s-store.{kind}']
+        rows += [f'github\thttps://github.com/byizmysh/iz2s-cheese/releases/download/v0.8.0/iz2s-cheese.{kind}']
         catalog.write_text('\n'.join(rows)+'\n')
         binary=work/('test-'+kind)
         subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror',

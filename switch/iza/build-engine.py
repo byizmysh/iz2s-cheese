@@ -71,7 +71,7 @@ def build(args):
     module['switch']['files'].append('switch/iza/' + filename)
     # Source archive must carry the bound companion; a loose sdImage cannot.
     module['switch'].pop('sdImage', None)
-    module['switch']['files'] = [f for f in module['switch']['files'] if f != 'switch/sd/iz2s-store.iza']
+    module['switch']['files'] = [f for f in module['switch']['files'] if f != 'switch/sd/iz2s-cheese.iza']
     descriptor.write_text(json.dumps(module, indent=2) + '\n')
     print(filename)
 

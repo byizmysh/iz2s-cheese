@@ -11,15 +11,14 @@
 #define STORE_PATH 512
 #define STORE_MESSAGE 160
 #define STORE_ICON_SIZE 96
-#define STORE_DIR "/iz2s/iz2s-store"
+#define STORE_DIR "/iz2s/iz2s-cheese"
 #define MODULE_DIR "/iz2s/modules"
 #ifdef IZ_STORE_STANDALONE
-#define STORE_CATALOG_DIR "/switch/iz2s-store/catalog"
+#define STORE_CATALOG_DIR "/switch/iz2s-cheese/catalog"
 #else
-#define STORE_CATALOG_DIR MODULE_DIR "/iz2s-store/catalog"
+#define STORE_CATALOG_DIR MODULE_DIR "/iz2s-cheese/catalog"
 #endif
 
-void store_migrate(const char *root);
 
 typedef enum { PACKAGE_IZM, PACKAGE_NRO, PACKAGE_IZM_NRO } PackageKind;
 typedef enum { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, EXTERNAL, UNAVAILABLE, SELF_ENTRY } InstallState;

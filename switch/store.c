@@ -89,14 +89,6 @@ static bool commit(const char *directory) {
 
 static bool flush(FILE *file) { return fflush(file) == 0 && fsync(fileno(file)) == 0; }
 
-void store_migrate(const char *root) {
-    char from[STORE_PATH], to[STORE_PATH], parent[STORE_PATH];
-    struct stat st;
-    if (!path(from, "%s/iz2s/store", root) || !path(to, "%s" STORE_DIR, root) ||
-        !path(parent, "%s/iz2s", root) || lstat(from, &st) || !S_ISDIR(st.st_mode) ||
-        lstat(to, &st) == 0 || errno != ENOENT) return;
-    if (rename(from, to) == 0) commit(parent);
-}
 
 const char *store_extension(PackageKind kind) { return kind == PACKAGE_IZM ? "iza" : "nro"; }
 
@@ -484,7 +476,7 @@ static bool conflict(const char *directory, const Package *app) {
 #endif
 
 static bool is_store_entry(const Package *package) {
-    return !strcmp(package->id, "iz2s-store");
+    return !strcmp(package->id, "iz2s-cheese");
 }
 
 const App *store_self_entry(const Store *store) {
@@ -495,13 +487,13 @@ const App *store_self_entry(const Store *store) {
 
 static const char *running_version;
 #ifdef IZ_STORE_STANDALONE
-static const char store_program[] = "/switch/iz2s-store/iz2s-store.nro";
+static const char store_program[] = "/switch/iz2s-cheese/iz2s-cheese.nro";
 void store_set_running_nro(const char *path, const char *version) {
     if (path && !strncmp(path, "sdmc:", 5)) path += 5;
     running_version = path && !strcmp(path, store_program) ? version : NULL;
 }
 #else
-static const char store_program[] = MODULE_DIR "/iz2s-store/launcher.iza";
+static const char store_program[] = MODULE_DIR "/iz2s-cheese/launcher.iza";
 void store_set_running_iza(const char *version) { running_version = version; }
 #endif
 
@@ -525,7 +517,7 @@ static bool self_update_available(const Store *store, const Package *package) {
     if (!running_version || !stable_version(running_version, current) || !stable_version(package->version, candidate)) return false;
     char expected[RELEASE_URL_MAX];
     int length = snprintf(expected, sizeof expected,
-        "https://github.com/byizmysh/iz2s-store/releases/download/v%s/iz2s-store.%s",
+        "https://github.com/byizmysh/iz2s-cheese/releases/download/v%s/iz2s-cheese.%s",
         package->version, store_extension(package->kind));
     if (length < 0 || (size_t)length >= sizeof expected || strcmp(expected, package->release_url)) return false;
     for (unsigned i = 0; i < 3; ++i)
@@ -561,7 +553,7 @@ void store_refresh(const Store *store, App *app) {
 #else
     if (state == ABSENT) {
         char icon[STORE_PATH];
-        if (path(icon, "%s/.izstore-icon.rgba", directory) && file_state(icon) == REGULAR && unlink(icon) == 0)
+        if (path(icon, "%s/.izcheese-icon.rgba", directory) && file_state(icon) == REGULAR && unlink(icon) == 0)
             commit(directory);
         app->state = conflict(directory, &app->package) ? UNAVAILABLE : NOT_INSTALLED;
         return;
@@ -612,7 +604,7 @@ bool store_read_installed_icon(const Store *store, const App *app, uint32_t *pix
         return false;
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], sidecar[STORE_PATH];
     module_paths(store, &app->package, directory, active, backup);
-    if (path(sidecar, "%s/.izstore-icon.rgba", directory)) {
+    if (path(sidecar, "%s/.izcheese-icon.rgba", directory)) {
         FILE *file = control_read(sidecar);
         if (file) {
             bool ok = fread(pixels, 1, ICON_BYTES, file) == ICON_BYTES && fgetc(file) == EOF && !ferror(file);
@@ -654,8 +646,8 @@ void store_sync_icon_pixels(const Store *store, const App *app, const void *rgba
     const unsigned char *pixels = rgba;
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], to[STORE_PATH], stage[STORE_PATH];
     module_paths(store, &app->package, directory, active, backup);
-    if (!path(to, "%s/.izstore-icon.rgba", directory) ||
-        !path(stage, "%s/.izstore-icon.tmp", directory)) return;
+    if (!path(to, "%s/.izcheese-icon.rgba", directory) ||
+        !path(stage, "%s/.izcheese-icon.tmp", directory)) return;
     if (file_state(to) == REGULAR) {
         FILE *old = fopen(to, "rb");
         if (old) {
@@ -892,7 +884,7 @@ bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *
                            char out[STORE_MESSAGE]) {
     if (!store_load(store, root, out)) return false;
     if (!settings->online) {
-        if (!store->count) snprintf(out, STORE_MESSAGE, "Copy catalog.tsv and artwork.bin to the Store catalog folder.");
+        if (!store->count) snprintf(out, STORE_MESSAGE, "Copy catalog.tsv and artwork.bin to IZ2S Cheese catalog folder.");
         return true;
     }
     if (!settings->url[0]) {
@@ -1027,22 +1019,22 @@ static void cleanup_old(const char *directory, const Package *previous, const Pa
 #ifdef IZ_STORE_STANDALONE
 static bool update_store_nro(const Store *store, const Package *package, Progress progress,
                              char out[STORE_MESSAGE]) {
-    if (!self_update_available(store, package)) return message(out, "Open the official release to update the Store.");
+    if (!self_update_available(store, package)) return message(out, "Open the official release to update IZ2S Cheese.");
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], stage[STORE_PATH];
     module_paths(store, package, directory, active, backup);
     if (!path(stage, "%s/.store-update.tmp", directory) ||
         !path(backup, "%s/.store-previous.nro.bak", directory))
-        return message(out, "The Store path is too long.");
+        return message(out, "IZ2S Cheese path is too long.");
     if (file_state(active) != REGULAR || file_state(backup) == OTHER || file_state(stage) == OTHER)
-        return message(out, "Could not update the Store at its standard SD path.");
+        return message(out, "Could not update IZ2S Cheese at its standard SD path.");
     if (matches(active, &package->files[0]))
-        return message(out, "This update is already saved. Reopen IZ2S Store.");
+        return message(out, "This update is already saved. Reopen IZ2S Cheese.");
     if (file_state(stage) == REGULAR && unlink(stage))
         return message(out, "Could not clear an interrupted update.");
     if (!stage_github(package, 0, stage, progress, 0, package->files[0].bytes, out)) return false;
     if (cancelled(progress) || !valid_image(stage, package)) {
         unlink(stage);
-        return message(out, cancelled(progress) ? "Download cancelled." : "The Store update is incompatible.");
+        return message(out, cancelled(progress) ? "Download cancelled." : "The Cheese update is incompatible.");
     }
     if ((file_state(backup) == REGULAR && unlink(backup)) || rename(active, backup)) {
         unlink(stage);
@@ -1052,10 +1044,10 @@ static bool update_store_nro(const Store *store, const Package *package, Progres
         rename(backup, active);
         unlink(stage);
         commit(directory);
-        return message(out, "Could not install the Store update.");
+        return message(out, "Could not install the Cheese update.");
     }
     if (!commit(directory)) return message(out, "Could not confirm the update on SD.");
-    snprintf(out, STORE_MESSAGE, "Updated to %s. Reopen IZ2S Store.", package->version);
+    snprintf(out, STORE_MESSAGE, "Updated to %s. Reopen IZ2S Cheese.", package->version);
     return true;
 }
 #endif
@@ -1067,7 +1059,7 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
         return update_store_nro(store, &package, progress, out);
 #else
         if (!self_update_available(store, &package))
-            return message(out, "No compatible official Store update in this catalog.");
+            return message(out, "No compatible official Cheese update in this catalog.");
 #endif
     }
 #ifdef IZ_STORE_STANDALONE
@@ -1186,12 +1178,12 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
     }
 #endif
     snprintf(out, STORE_MESSAGE, "%s %s%s", exists ? "Updated to" : "Installed", package.version,
-             self ? ". Reopen IZ2S Store." : "");
+             self ? ". Reopen IZ2S Cheese." : "");
     return true;
 }
 
 bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
-    if (is_store_entry(&app->package)) return message(out, "Exit the Store before removing it.");
+    if (is_store_entry(&app->package)) return message(out, "Exit IZ2S Cheese before removing it.");
 #ifdef IZ_STORE_STANDALONE
     if (app->package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZ2S.");
 #endif
@@ -1204,7 +1196,7 @@ bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
     if (unlink(active) || !commit(directory)) return message(out, "Could not remove the application.");
 #ifndef IZ_STORE_STANDALONE
     if (app->package.kind != PACKAGE_IZM) {
-        static const char *const icons[] = {".izstore-icon.rgba", ".izstore-icon.rgba.bak"};
+        static const char *const icons[] = {".izcheese-icon.rgba", ".izcheese-icon.rgba.bak"};
         for (size_t i = 0; i < sizeof icons / sizeof *icons; ++i) {
             char icon[STORE_PATH];
             if (path(icon, "%s/%s", directory, icons[i]) && file_state(icon) == REGULAR)
