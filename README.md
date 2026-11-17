@@ -9,23 +9,23 @@ A homebrew store for Nintendo Switch 2.
 
 ## Choose your build
 
-| Console environment | Archive | Supported apps |
-| --- | --- | --- |
-| [IZ2S](https://github.com/byizmysh/IZ2S-Platform) | [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) | **.iza** and **.nro** |
-| [kaiHEN](https://github.com/ouncebrew/kaihen) | [`iz2s-store-nro-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-nro-sd.zip) | **.nro** |
+| Console environment | Supported apps |
+| --- | --- |
+| [IZ2S](https://github.com/byizmysh/IZ2S-Platform) | **.iza** and **.nro** |
+| [kaiHEN](https://github.com/ouncebrew/kaihen) | **.nro** |
 
 ## Install on IZ2S
 
 **Use IZ2S Platform 0.25 or later with the Store 0.8.0 runtime service.** Update the IZ2S runtime and restart the console session before opening the Store. The Store ZIP installs the app tile.
 
-- **From microSD.** Extract `iz2s-store-iza-sd.zip` to the card root. To copy the executable manually, save `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. Open the **IZ2S Store** tile.
+- **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) to the card root. To copy the executable manually, save `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. Open the **IZ2S Store** tile.
 - **From IZ2S Platform on PC.** Connect the console via PC Link, open **App library → Add app**, and select `iz2s-store-iza-sd.zip`. If the import is still queued, open **Add App** on the console.
 
 The Store installs apps to `/iz2s/modules/<id>/launcher.iza` or `/iz2s/modules/<id>/launcher.nro`.
 
 ### Install on kaiHEN
 
-Extract `iz2s-store-nro-sd.zip` to the card root or copy `iz2s-store.nro` to `/switch/iz2s-store/iz2s-store.nro`. Launch **IZ2S Store** from the homebrew menu. The Store installs apps to `/switch/<id>/<id>.nro`. IZA apps require IZ2S Platform.
+Extract [`iz2s-store-nro-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-nro-sd.zip) to the card root or copy `iz2s-store.nro` to `/switch/iz2s-store/iz2s-store.nro`. Launch **IZ2S Store** from the homebrew menu. The Store installs apps to `/switch/<id>/<id>.nro`. IZA apps require IZ2S Platform.
 
 ## Add a catalog
 
