@@ -32,6 +32,11 @@ int main(int argc, char **argv) {
     }
     View view = {0};
     store_settings_read(store.root, &view.settings);
+    if (!strcmp(command, "refresh")) {
+        bool ok = store_refresh_catalog(&store, argv[1], &view.settings, message);
+        puts(message);
+        return ok ? 0 : 1;
+    }
     if (!strcmp(command, "artwork")) {
         printf("%u\n", store_read_artwork(&store, &view.settings, NULL));
         return 0;

@@ -8,7 +8,7 @@ Switch 2 homebrew menu. The interface is in English.
 
 - **IZlauncher** — extract `iz2s-store-iza-sd.zip` to the SD root, or copy
   `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. This
-  edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.6.2
+  edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.6.3
   hosted service. After updating the runtime, restart IZlauncher.
 - **Switch 2 homebrew menu** — copy `iz2s-store.nro` as
   `/switch/iz2s-store/iz2s-store.nro`. The standalone build
@@ -21,7 +21,9 @@ Switch 2 homebrew menu. The interface is in English.
    on a private IPv4 LAN server.
 3. Confirm the URL. The Store downloads the catalog and its thumbnails
    automatically. **Download catalog** refreshes both files. The cache is
-   reused when the Store opens, including when offline.
+   reused when the Store opens, including when offline. If you have a saved URL
+   and are missing the catalog or its thumbnails, the Store tries to download
+   the missing data when it opens.
 
 You can also copy a catalog to `/iz2s/iz2s-store/catalog.tsv` on the SD card and
 press **Y** to reload it. A downloaded list can add to that local list or
@@ -82,7 +84,7 @@ IZ_STORE_FONT_DIR=/path/to/dejavu sh build.sh nro
 ```
 
 To build IZA, set `IZ2S_PLATFORM_ROOT` to a checkout of IZ2S Platform 0.25
-with the Store 0.6.2 hosted service. Install the SB4 headers alongside the
+with the Store 0.6.3 hosted service. Install the SB4 headers alongside the
 devkitPro folder and put `glslangValidator` and `spirv-val` on PATH.
 
 ```sh

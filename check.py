@@ -130,5 +130,19 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
         (legacy / 'catalog.tsv').write_text('Do not overwrite the active catalog.')
         assert len(run('list').splitlines()) == len(app_ids)
         assert (legacy / 'catalog.tsv').is_file()
+        cache.unlink()
+        artwork_cache.unlink()
+        (cache.parent / 'settings.txt').write_text(url + '\n')
+        source.write_text(initial)
+        artwork.write_bytes(image_pack)
+        assert '1 thumbnail.' in run('refresh')
+        assert run('artwork').strip() == '1'
+        artwork_cache.unlink()
+        assert not run('refresh').strip()
+        assert run('artwork').strip() == '1'
+        source.unlink()
+        artwork.unlink()
+        assert not run('refresh').strip()
+        assert run('artwork').strip() == '1'
 
-print('Verified catalog-free packages, external catalogs, cache recovery and SD data migration.')
+print('Verified catalog-free packages, automatic startup download, offline cache and SD data migration.')

@@ -718,6 +718,23 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
     return true;
 }
 
+bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
+                           char out[STORE_MESSAGE]) {
+    if (!store_load(store, root, out)) return false;
+    if (!settings->url[0]) {
+        if (store->count) snprintf(out, STORE_MESSAGE, "Set Catalog URL in Settings to download thumbnails.");
+        return true;
+    }
+    if (!store->remote_count) {
+        if (store_fetch_list(store, settings, out)) return true;
+        char recovery[STORE_MESSAGE];
+        return store_load(store, root, recovery) && store->count > 0;
+    }
+    if (!store_read_artwork(store, settings, NULL) && !store_fetch_artwork(store, settings))
+        snprintf(out, STORE_MESSAGE, "No thumbnails received. Check artwork.bin next to catalog.tsv.");
+    return true;
+}
+
 static bool stage_file(const char *source, const char *stage, const PackageFile *file,
                        Progress progress, uint64_t done, uint64_t total) {
     FILE *output = open_new(stage);

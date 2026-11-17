@@ -55,6 +55,8 @@ typedef void (*StoreProgress)(void *, uint64_t done, uint64_t total);
 typedef struct { StoreProgress report; void *context; const atomic_bool *cancel; } Progress;
 
 bool store_load(Store *store, const char *root, char message[STORE_MESSAGE]);
+bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
+                           char message[STORE_MESSAGE]);
 void store_settings_read(const char *root, StoreSettings *settings);
 bool store_settings_write(const char *root, const StoreSettings *settings, char message[STORE_MESSAGE]);
 bool store_fetch_list(Store *store, const StoreSettings *settings, char message[STORE_MESSAGE]);

@@ -97,13 +97,8 @@ static void progress(void *context, uint64_t done, uint64_t total) {
 static void run_task(void *context) {
     Task *task = context;
     if (task->command == REFRESH) {
-        task->ok = store_load(task->result, SD_ROOT, task->message);
-        if (task->ok) {
-            refresh_apps(task->result);
-            if (task->result->remote_count &&
-                !store_read_artwork(task->result, &task->settings, NULL))
-                store_fetch_artwork(task->result, &task->settings);
-        }
+        task->ok = store_refresh_catalog(task->result, SD_ROOT, &task->settings, task->message);
+        if (task->ok) refresh_apps(task->result);
         network_status(task);
     } else if (task->command == FETCH_LIST || task->command == STARTUP_CHECK || task->command == CHECK_NETWORK) {
         network_status(task);
@@ -157,7 +152,7 @@ static bool start_task(Task *task, Thread *thread, View *view, const Store *stor
     view->percent = 0;
     if (view->failure) snprintf(view->message, sizeof view->message, "Could not start SD operation (0x%08x).", result);
     else snprintf(view->message, sizeof view->message, "%s",
-        command == REFRESH ? "Reading the local catalog..." :
+        command == REFRESH ? "Loading catalog..." :
         command == REMOVE ? "Removing the application..." :
         command == FETCH_LIST ? "Fetching catalog and thumbnails..." :
         command == CHECK_NETWORK || command == STARTUP_CHECK ? "Checking the network..." :
