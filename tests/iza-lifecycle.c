@@ -12,7 +12,7 @@
 
 typedef uint32_t (*Entry)(IzNativeApp *, uint32_t);
 static const char *image_path, *missing;
-static int legacy, creates, joins, closes, loads, unloads, reports, completed;
+static int service_revision, creates, joins, closes, loads, unloads, reports, completed;
 static void (*worker)(void *);
 static void *worker_arg, *image_code, *image_data;
 static size_t code_size, data_size;
@@ -58,7 +58,7 @@ static uint32_t unload(IzNativeApp *app,uint64_t token) {
     (void)app; assert(token==42&&joins==creates&&closes==creates);
     ++unloads; munmap(image_code,code_size);munmap(image_data,data_size);image_code=image_data=NULL;return 0;
 }
-static uint32_t version(void) {return 1;}
+static uint32_t version(void) {return service_revision;}
 static uint32_t create(void *t,void (*fn)(void*),void *arg,void *stack,size_t size,int priority,int core) {
     (void)t;(void)stack;(void)size;(void)priority;(void)core;
     worker=fn;worker_arg=arg;completed=0;++creates;return 0;
@@ -85,7 +85,7 @@ static int *get_errno(void) {return &errno;}
 static Sb4CFunction resolve(const char *name) {
     if(missing&&!strcmp(name,missing))return NULL;
 #define MAP(n,f) if(!strcmp(name,n))return (Sb4CFunction)(f)
-    MAP("sb4NativeServicesVersion",legacy?NULL:version);
+    MAP("sb4NativeServicesVersion",service_revision?version:NULL);
     MAP("__errno",get_errno);MAP("threadCreate",create);MAP("threadStart",start);
     MAP("threadWaitForExit",join);MAP("threadClose",close_thread);
     MAP("lstat",no_file);MAP("stat",no_file);MAP("access",no_file);MAP("fopen",no_stream);
@@ -128,12 +128,11 @@ int main(int argc,char **argv) {
     app->write_file=write_report;app->buttons=buttons;app->request_exit=request_exit;
     unsigned char *art=read_file(argv[3],&bytes);assert(bytes<0x200000-1024);
     memcpy((char*)app->controls+1024,art,bytes);free(art);
-    legacy=1;assert(entry(app,IZ_NATIVE_INIT)==0xe871);assert(!loads&&reports==1);assert(!entry(app,IZ_NATIVE_STOP));
-    legacy=0;missing="sslConnectionDoHandshake";
-    assert(entry(app,IZ_NATIVE_INIT)==0xe872);assert(!strcmp(report,missing));
+    missing="sslConnectionDoHandshake";
+    assert(entry(app,IZ_NATIVE_INIT)==0xe872);assert(reports==1&&!strcmp(report,missing));
     assert(!entry(app,IZ_NATIVE_STOP)&&loads==unloads&&!creates);
     missing=NULL;
-    for(int cycle=0;cycle<3;++cycle) {
+    for(service_revision=0;service_revision<3;++service_revision) {
         memset(app->data,0,4096);assert(!entry(app,IZ_NATIVE_INIT));
         assert(entry(app,IZ_NATIVE_STOP)==IZ_NATIVE_STOP_PENDING);assert(loads==unloads+1);
         worker(worker_arg);completed=1;
@@ -149,5 +148,5 @@ int main(int argc,char **argv) {
     assert(tls_open==1&&tls_close==1&&dns_calls==1&&sockets_closed==0);
     assert(!entry(app,IZ_NATIVE_STOP));assert(loads==unloads&&creates==joins&&joins==closes);
     free(app->data);free(app->controls);
-    puts("ARM64 module: relocation, missing SDK/import, cancellation, join-before-unload, repeated startup, keyboard, DNS failure, borrowed socket/TLS cleanup PASS");
+    puts("ARM64 module: relocation, service discovery, missing import, cancellation, repeated startup, keyboard, DNS failure, and socket/TLS cleanup PASS");
 }

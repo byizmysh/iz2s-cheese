@@ -1,5 +1,4 @@
 #include <sb4/native-app.h>
-#include <sb4/native-services.h>
 #include "engine-asset.h"
 
 typedef uint32_t (*StoreEvent)(IzNativeApp *, uint32_t);
@@ -13,12 +12,6 @@ uint32_t iz_app(IzNativeApp *app, uint32_t event) {
     State *state = app->data;
     IzNativeApp3 *loader = (IzNativeApp3 *)app;
     if (event == IZ_NATIVE_INIT) {
-        uint32_t (*version)(void) = (uint32_t (*)(void))services->resolve_c(SB4_NATIVE_SERVICES_IMPORT);
-        if (!version || version() != SB4_NATIVE_SERVICES_VERSION) {
-            const char message[] = "Update IZ2S Platform: native services v1 required.\n";
-            if (app->write_file) app->write_file(app, "startup-error.txt", message, sizeof message - 1);
-            return 0xe871;
-        }
         if (!loader->load_image || !loader->unload_image) return 0xe873;
         uint32_t rc = loader->load_image(app, STORE_ENGINE_ASSET, &state->image);
         if (rc) return rc;

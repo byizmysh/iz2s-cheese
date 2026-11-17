@@ -16,7 +16,7 @@ A homebrew store for Nintendo Switch 2.
 
 ## Install on IZ2S
 
-**Use the updated IZ2S Platform 0.25 with native services v1.** Restart the IZ2S session after updating the platform. On a system that already has native services v1, update the Store by installing the new ZIP. The SDK is part of IZ2S Platform.
+The Store runs from its own module. Install the complete SD bundle so the executable and its engine are installed together. At startup, the Store checks that the launcher provides the functions it needs. Use an updated IZ2S Platform runtime and restart the IZ2S session after updating it.
 
 - **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) on your PC. Copy the extracted `iz2s/` folder to the root of the card. Keep `launcher.iza`, `sd-bundle.json` and its `asset-*.izdata` file together in `/iz2s/modules/iz2s-store/`. The executable alone is not a complete installation. Open the **IZ2S Store** tile.
 - **From IZ2S Platform on PC.** Connect the console via PC Link, open **App library → Add app**, and select `iz2s-store-iza-sd.zip` directly. The panel imports the ZIP. If the import is still queued, open **Add App** on the console.

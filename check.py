@@ -27,11 +27,12 @@ if check_iza:
             assert len(engine) == item['bytes'] and hashlib.sha256(engine).hexdigest() == item['sha256']
             assert engine.startswith(b'IZNATRL1')
             assert b'sb4IZ2SStoreEvent' not in engine
+            assert b'sb4NativeServicesVersion' not in engine
             assert b'sslConnectionDoHandshake' in engine and b'swkbdShow' in engine
         iza = archive.read(entry)
         assert bundle['launcher']['sha256'] == hashlib.sha256(iza).hexdigest()
         assert b'sb4IZ2SStoreEvent' not in iza
-        assert b'sb4NativeServicesVersion' in iza
+        assert b'sb4NativeServicesVersion' not in iza
     assert iza == (output / 'iz2s-store.iza').read_bytes()
     assert iza.startswith(b'IZSDAPP1')
     artwork = iza.index(b'IZSTOREA')

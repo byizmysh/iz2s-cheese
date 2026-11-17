@@ -562,6 +562,17 @@ static FILE *control_read(const char *name) {
     return NULL;
 }
 
+static bool read_program_icon(const char *active, bool iza, uint32_t *pixels) {
+    if (file_state(active) != REGULAR) return false;
+    FILE *file = fopen(active, "rb");
+    if (!file) return false;
+    struct stat info;
+    bool ok = !fstat(fileno(file), &info) && info.st_size > 0 &&
+        installed_artwork(file, (uint64_t)info.st_size, iza, pixels);
+    fclose(file);
+    return ok;
+}
+
 bool store_read_installed_icon(const Store *store, const App *app, uint32_t *pixels) {
     if (app->state != INSTALLED && app->state != UPDATE_AVAILABLE && app->state != EXTERNAL)
         return false;
@@ -579,14 +590,7 @@ bool store_read_installed_icon(const Store *store, const App *app, uint32_t *pix
     if (file_state(active) == ABSENT &&
         !path(active, "%s" INSTALL_DIR "/%s.nro", store->root, app->package.id)) return false;
 #endif
-    if (file_state(active) != REGULAR) return false;
-    FILE *file = fopen(active, "rb");
-    if (!file) return false;
-    struct stat info;
-    bool ok = !fstat(fileno(file), &info) && info.st_size > 0 &&
-        installed_artwork(file, (uint64_t)info.st_size, app->package.kind == PACKAGE_IZM, pixels);
-    fclose(file);
-    return ok;
+    return read_program_icon(active, app->package.kind == PACKAGE_IZM, pixels);
 }
 
 static bool control_publish(const char *stage, const char *final, const char *directory) {
@@ -1147,6 +1151,16 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
         /* Keep old content-addressed resources so the backup remains launchable. */
     } else if (exists && unlink(backup) == 0) cleanup_old(directory, &old.package, &package);
     if (!commit(directory)) return message(out, "The SD card did not confirm cleanup.");
+#ifndef IZ_STORE_STANDALONE
+    if (package.kind != PACKAGE_IZM) {
+        uint32_t *pixels = malloc(ICON_BYTES);
+        if (pixels && read_program_icon(active, false, pixels)) {
+            App installed = {.package = package, .state = INSTALLED};
+            store_sync_icon_pixels(store, &installed, pixels);
+        }
+        free(pixels);
+    }
+#endif
     snprintf(out, STORE_MESSAGE, "%s %s%s", exists ? "Updated to" : "Installed", package.version,
              self ? ". Reopen IZ2S Store." : "");
     return true;
@@ -1164,6 +1178,16 @@ bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
         !read_receipt(directory, &app->package, active, &receipt))
         return message(out, "This copy is managed outside this store.");
     if (unlink(active) || !commit(directory)) return message(out, "Could not remove the application.");
+#ifndef IZ_STORE_STANDALONE
+    if (app->package.kind != PACKAGE_IZM) {
+        static const char *const icons[] = {".izstore-icon.rgba", ".izstore-icon.rgba.bak"};
+        for (size_t i = 0; i < sizeof icons / sizeof *icons; ++i) {
+            char icon[STORE_PATH];
+            if (path(icon, "%s/%s", directory, icons[i]) && file_state(icon) == REGULAR)
+                unlink(icon);
+        }
+    }
+#endif
     cleanup_old(directory, &receipt.package, NULL);
     if (!commit(directory)) return message(out, "The SD card did not confirm cleanup.");
     snprintf(out, STORE_MESSAGE, "Removed. Saved data is still on SD.");

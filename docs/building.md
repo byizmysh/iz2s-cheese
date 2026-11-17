@@ -11,7 +11,9 @@ For IZA, install the updated libsb4 headers alongside the devkitPro directory. S
 
 ## Native module
 
-`switch/iza/entry.c` loads the module-owned `asset-<sha256>.izdata` using the SDK image loader. The resource contains `main.c`, `store.c`, `ui.c`, `download.c` and the icon decoder. Their writable state is allocated with the image. The launcher contains no Store event handler, UI, catalog parser or installer.
+`switch/iza/entry.c` loads the module-owned `asset-<sha256>.izdata` using the SDK image loader. The resource contains `main.c`, `store.c`, `ui.c`, `download.c` and the icon decoder. Their writable state is allocated with the image. The launcher also provides the embedded Store handler for older packages through
+`sb4IZ2SStoreEvent`. Independent images continue to execute their own Store code.
+Both IZA paths receive the required SDK functions through the Store service table.
 
 The image resolves the explicit imports in `switch/iza/imports.json` before running application code. Native services v1 uses the pinned libounce C ABI. Missing services fail before a worker starts, with `startup-error.txt` or `missing-sdk-import.txt` in the module folder. TLS certificate and hostname verification remain enabled. Shared launcher sockets are borrowed and never closed by the Store.
 

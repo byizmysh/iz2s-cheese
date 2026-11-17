@@ -1,5 +1,4 @@
 #include <sb4/native-app.h>
-#include <sb4/native-services.h>
 
 extern const char *const store_import_names[];
 extern Sb4CFunction store_imports[];
@@ -11,8 +10,7 @@ uint32_t store_engine(IzNativeApp *app, uint32_t event) {
     if (event == IZ_NATIVE_INIT) {
         const Sb4Compat *api = sb4ModuleCompat(app);
         if (!api) return 0xe870;
-        uint32_t (*version)(void) = (uint32_t (*)(void))api->resolve_c(SB4_NATIVE_SERVICES_IMPORT);
-        if (!version || version() != SB4_NATIVE_SERVICES_VERSION) return 0xe871;
+        /* Resolve each required service independently of the runtime release. */
         for (unsigned i = 0; i < store_import_count; ++i) {
             store_imports[i] = api->resolve_c(store_import_names[i]);
             if (!store_imports[i]) {
