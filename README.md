@@ -16,10 +16,10 @@ A homebrew store for Nintendo Switch 2.
 
 ## Install on IZ2S
 
-**Use IZ2S Platform 0.25 or later with the Store 0.8.0 runtime service.** Update the IZ2S runtime and restart the console session before opening the Store. The Store ZIP installs the app tile.
+**IZ2S Platform 0.25 or later is required.** Restart the IZ2S session after updating the platform.
 
-- **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) to the card root. To copy the executable manually, save `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. Open the **IZ2S Store** tile.
-- **From IZ2S Platform on PC.** Connect the console via PC Link, open **App library → Add app**, and select `iz2s-store-iza-sd.zip`. If the import is still queued, open **Add App** on the console.
+- **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) on your PC. Copy the extracted `iz2s/` folder to the root of the card. To copy the executable manually, save `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. Open the **IZ2S Store** tile.
+- **From IZ2S Platform on PC.** Connect the console via PC Link, open **App library → Add app**, and select `iz2s-store-iza-sd.zip` directly. The panel imports the ZIP. If the import is still queued, open **Add App** on the console.
 
 The Store installs apps to `/iz2s/modules/<id>/launcher.iza` or `/iz2s/modules/<id>/launcher.nro`.
 
