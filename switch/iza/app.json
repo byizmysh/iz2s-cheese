@@ -1,0 +1,24 @@
+{
+  "format": "hblauncher.gpu-app",
+  "abi": 1,
+  "id": "iz-homebrew-store",
+  "name": "IZ2S Store",
+  "version": "0.6.0",
+  "description": "Install Switch 2 homebrew from SD or GitHub",
+  "icon": "assets/icon.png",
+  "transition": "none",
+  "sdOnly": true,
+  "initialState": "assets/state.bin",
+  "data": "assets/data.bin",
+  "shaders": {
+    "vertex": "app.vert.spv",
+    "compute": "app.comp.spv",
+    "fragment": "app.frag.spv"
+  },
+  "native": {
+    "format": "iz2s.native-app",
+    "abi": 7,
+    "code": "native.bin",
+    "dataBytes": 4096
+  }
+}

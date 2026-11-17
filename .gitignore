@@ -1,0 +1,7 @@
+.build/
+*.izm
+__pycache__/
+.versions/
+/switch/iza/*.spv
+/switch/iza/native.bin
+/switch/iza/assets/

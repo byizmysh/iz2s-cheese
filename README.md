@@ -1,0 +1,87 @@
+# IZ2S Store
+
+IZ2S Store is a homebrew app browser and installer for Nintendo Switch 2.
+It supports an IZA build for IZlauncher and a standalone NRO build for the
+Switch 2 homebrew menu. The interface is in English.
+
+## Install
+
+- **IZlauncher** — extract `IZ-Homebrew-Store-SD.zip` to the SD root, or copy
+  `IZ2S-Store.iza` as `/iz2s/modules/iz-homebrew-store/launcher.iza`. This
+  edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.6
+  hosted service. After updating the runtime, restart IZlauncher.
+- **Switch 2 homebrew menu** — copy `IZ2S-Store-Standalone.nro` as
+  `/switch/iz-homebrew-store/iz-homebrew-store.nro`. The standalone build
+  needs a Switch 2 homebrew environment with libounce support.
+
+## Add a catalog
+
+1. Open **Settings** with **−** and select **Catalog URL**.
+2. Enter the raw HTTPS URL of an external GitHub `catalog.tsv`, or its HTTP URL
+   on a private IPv4 LAN server.
+3. Choose **Download catalog**. The validated list is cached on the SD card
+   at `/iz2s/store/remote.tsv` and reused when the store opens.
+
+You can also copy a catalog to `/iz2s/store/catalog.tsv` on the SD card and
+press **Y** to reload it. A downloaded list can add to that local list or
+replace its online entries by ID. Clear the URL to use only the local file.
+
+The repository and release packages ship without a catalog or application
+payloads. A fresh installation opens with an empty list and no configured URL.
+
+## Use the store
+
+Use the controller or touch screen to browse categories and app details.
+Open the repository tile with **R** to see the publisher URL. Select
+**Download** or **Update** to install a verified release. **B** cancels a
+download and **Y** minimizes it while you continue browsing. **X** opens the
+removal dialog for apps managed by the store. Saved data is kept.
+
+The IZA edition installs to `/iz2s/modules/<id>/`. The standalone edition
+installs NROs to `/switch/<id>/<id>.nro`. IZA entries require IZlauncher.
+
+## Catalog format
+
+Use UTF-8, tabs between fields and an `IZSTORE2` header on the first line.
+For each online application, place these records together:
+
+| Record | Fields after the record name |
+| --- | --- |
+| `app` | ID, `nro`, version, title, author, category, description |
+| `repository` (optional) | HTTPS project URL |
+| `file` | Exact byte count, lowercase SHA-256, `launcher.nro` |
+| `github` | Direct HTTPS URL for a tagged GitHub Release NRO asset |
+
+The list can contain up to 24 entries. App IDs must be unique. The store
+checks byte count, SHA-256, and Switch 2 NRO compatibility before installation.
+Downloads go directly from the console to the release server. A LAN server
+hosting the catalog does not need to proxy the releases.
+
+Optional catalog artwork can be copied separately to
+`/iz2s/store/icons/<id>.rgba` as exactly 96 × 96 straight RGBA pixels.
+The store uses fallback artwork if a card has no image.
+
+## Build
+
+Use a Switch 2 devkitPro installation with libounce and set `DEVKITPRO`
+or `IZ_DEVKITPRO`. Install Node.js, Python and Pillow. Point
+`IZ_STORE_FONT_DIR` at a folder containing `DejaVuSans.ttf` and
+`DejaVuSans-Bold.ttf`, or use the default font folder in IZ2S Platform.
+
+```sh
+IZ_STORE_FONT_DIR=/path/to/dejavu sh build.sh nro
+```
+
+To build IZA, set `IZ2S_PLATFORM_ROOT` to a checkout of IZ2S Platform 0.25
+with the Store 0.6 hosted service. Install the SB4 headers alongside the
+devkitPro folder and put `glslangValidator` and `spirv-val` on PATH.
+
+```sh
+IZ2S_PLATFORM_ROOT=/path/to/IZ2S-Platform sh build.sh both
+```
+
+Use `nro`, `iza`, or `both`. Set `IZ_STORE_OUT` to change the output
+directory. Use `IZ_STORE_CHECK=1` to run package and catalog checks with a
+host C compiler and OpenSSL development headers.
+
+The Store is MIT licensed. Font and library notices are included with the build.
