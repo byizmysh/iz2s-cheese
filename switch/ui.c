@@ -49,7 +49,7 @@ static uint32_t blend(uint32_t under, uint32_t over, unsigned alpha) {
     return 0xff000000u | r | (g << 8) | (b << 16);
 }
 
-#ifdef IZ_STORE_HOSTED
+#ifdef IZ_STORE_MODULE
 // The fragment shader uses the otherwise unused alpha byte to identify text.
 static uint32_t mark_text(uint32_t color) { return color & 0xfeffffffu; }
 #else
@@ -157,17 +157,22 @@ static const char *state_name(const App *app) {
         case UPDATE_AVAILABLE: return "Update available";
         case EXTERNAL: return "Installed separately";
         case UNAVAILABLE: return "Folder conflict";
+        case SELF_ENTRY: return "IZ2S Store release";
         default: return "Ready to download";
     }
 }
 
 static const char *primary(const App *app) {
+    if (!strcmp(app->package.id, "iz2s-store")) return NULL;
     if (app->state == NOT_INSTALLED) return "Download";
     if (app->state == UPDATE_AVAILABLE) return "Update";
     return NULL;
 }
 
-static bool managed(const App *app) { return app->state == INSTALLED || app->state == UPDATE_AVAILABLE; }
+static bool managed(const App *app) {
+    return strcmp(app->package.id, "iz2s-store") &&
+        (app->state == INSTALLED || app->state == UPDATE_AVAILABLE);
+}
 
 static void action_button(Canvas *canvas, int x, int y, int width, const char *letter,
                           const char *caption, bool filled) {
@@ -300,7 +305,7 @@ static void detail(Canvas *canvas, const App *app, const View *view) {
     }
 }
 
-enum { SETTINGS_Y = 282, SETTINGS_STEP = 72, SETTINGS_W = 952, SETTINGS_H = 62, SETTINGS_COUNT = 4 };
+enum { SETTINGS_Y = 282, SETTINGS_STEP = 66, SETTINGS_W = 952, SETTINGS_H = 59, SETTINGS_COUNT = 5 };
 
 static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,48,800,LARGE,ink,"Settings");
@@ -310,7 +315,13 @@ static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,200,952,SMALL,muted,view->addresses);
     label(canvas,CARD_X,230,952,SMALL,dim,"Change Wi-Fi and DNS in HOME > System Settings > Internet.");
     const char *titles[SETTINGS_COUNT] = {view->settings.online ? "Catalog source: Online" : "Catalog source: SD card",
-        "Catalog URL", view->settings.online ? "Download catalog" : "Reload SD catalog", "Test GitHub connection"};
+        "Catalog URL", view->settings.online ? "Download catalog" : "Reload SD catalog", "Test GitHub connection",
+        "Store update"};
+    const App *self = store_self_entry(store);
+    const char *update_status = !self ? "Load a catalog with an IZ2S Store entry" :
+        self->state == UPDATE_AVAILABLE ? "An official Store update is available" :
+        self->installed_version[0] ? "No newer Store version in this catalog" :
+        "Use the official release to update this copy";
     char list_status[90];
     if (store->remote_count)
         snprintf(list_status,sizeof list_status,"%u cached entries from the configured source",store->remote_count);
@@ -321,6 +332,7 @@ static void settings(Canvas *canvas, const Store *store, const View *view) {
         view->settings.url[0] ? view->settings.url : "No URL configured",
         list_status,
         view->github[0] ? view->github : "Checks DNS, HTTPS and the GitHub release server",
+        update_status,
     };
     for (unsigned i = 0; i < SETTINGS_COUNT; ++i) {
         int y = SETTINGS_Y + (int)i * SETTINGS_STEP;
@@ -573,7 +585,19 @@ void view_filter(View *view, const Store *store) {
     if (!view->count && !settings_screen(view->screen) && view->screen != ABOUT) view->screen = CATALOG;
 }
 
-static Command settings_action(View *view) {
+static Command settings_action(View *view, const Store *store) {
+    if (view->settings_row == 4) {
+        const App *self = store_self_entry(store);
+        if (self && self->state == UPDATE_AVAILABLE) return UPDATE_STORE;
+        view->screen = SETTINGS_RESULT;
+        view->failure = false;
+        snprintf(view->result_title, sizeof view->result_title, "Store update");
+        snprintf(view->message, sizeof view->message, "%s",
+            !self ? "Load a catalog that contains an IZ2S Store entry." :
+            self->installed_version[0] ? "This catalog has no newer Store version." :
+            "Use the official release to update a nonstandard Store path.");
+        return NO_JOB;
+    }
     if (view->settings_row == 0) return TOGGLE_CATALOG_SOURCE;
     if (view->settings_row == 2) {
         if (!view->settings.online) { view->screen = CATALOG; return REFRESH; }
@@ -625,7 +649,7 @@ Command view_input(View *view, const Store *store, unsigned buttons) {
         if (buttons & (BTN_B | BTN_MINUS)) view->screen = CATALOG;
         else if ((buttons & BTN_UP) && view->settings_row) --view->settings_row;
         else if ((buttons & BTN_DOWN) && view->settings_row+1 < SETTINGS_COUNT) ++view->settings_row;
-        else if (buttons & BTN_A) return settings_action(view);
+        else if (buttons & BTN_A) return settings_action(view, store);
         return NO_JOB;
     }
     if (view->screen == DETAILS) {
@@ -702,7 +726,7 @@ Command view_touch(View *view, const Store *store, int x, int y) {
         for (unsigned i = 0; i < SETTINGS_COUNT; ++i)
             if (hit(x,y,CARD_X,SETTINGS_Y+(int)i*SETTINGS_STEP,SETTINGS_W,SETTINGS_H)) {
                 view->settings_row = i;
-                return view->busy ? NO_JOB : settings_action(view);
+                return view->busy ? NO_JOB : settings_action(view, store);
             }
         return NO_JOB;
     }

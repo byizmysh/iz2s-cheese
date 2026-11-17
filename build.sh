@@ -8,6 +8,7 @@ DEVKITPRO=${IZ_DEVKITPRO:-${DEVKITPRO:?Set DEVKITPRO or IZ_DEVKITPRO to the inst
 export DEVKITPRO
 cross=${IZ_AARCH64_PREFIX:-"$DEVKITPRO/devkitA64/bin/aarch64-none-elf-"}
 include="$DEVKITPRO/../sb4/include"
+packer=${IZ_RELOCATABLE_PACKER:-"$platform_dir/../iz2s-platform-run23/tools/sd-launcher/relocatable.py"}
 if [ -f "$platform_dir/core/archive.cjs" ]; then
     output=${IZ_STORE_OUT:-"$platform_dir/dist/iz2s-store"}
 else
@@ -33,7 +34,7 @@ if [ "$build_nro" = 1 ]; then
     cp "$DEVKITPRO"/libounce/licenses/*.txt "$work/romfs/"
     cp "$module_dir/licenses/Octicons.txt" "$work/romfs/"
     "${cross}gcc" -std=gnu11 -O2 -Wall -Wextra -Werror -mcpu=cortex-a78c+crypto -mtp=soft \
-        -fPIE -ffunction-sections -fdata-sections -D__SWITCH__ -D__SWITCH2__ -DIZ_STORE_STANDALONE \
+        -fPIE -ffunction-sections -fdata-sections -D__SWITCH__ -D__SWITCH2__ -DIZ_STORE_STANDALONE -DIZ_STORE_VERSION=\"0.8.0\" \
         -isystem "$DEVKITPRO/libounce/include" -specs="$DEVKITPRO/libounce/switch.specs" \
         -L"$DEVKITPRO/libounce/lib" "$module_dir/switch/main.c" "$module_dir/switch/store.c" \
         "$module_dir/switch/ui.c" "$module_dir/switch/download.c" "$module_dir/switch/installed-artwork.c" \
@@ -59,6 +60,8 @@ PY
 fi
 
 if [ "$build_iza" = 1 ]; then
+python3 -B "$module_dir/switch/iza/build-engine.py" --devkitpro "$DEVKITPRO" --include "$include" \
+    --cross "$cross" --packer "$packer" --work "$work/engine"
 mkdir -p "$module_dir/switch/iza/assets"
 cp "$module_dir/brand/store-icon.png" "$module_dir/switch/iza/assets/icon.png"
 python3 -B "$module_dir/switch/iza/assets.py" "$work/romfs" "$module_dir/switch/iza/assets/data.bin"
@@ -73,7 +76,7 @@ for stage in vert frag comp; do
 done
 "${cross}gcc" -std=c11 -Os -Wall -Wextra -Werror -ffreestanding -fno-builtin \
     -fPIC -fvisibility=hidden -fno-stack-protector -fno-jump-tables -mbranch-protection=bti \
-    -I "$include" -c "$module_dir/switch/iza/entry.c" -o "$work/entry.o"
+    -I "$include" -I "$work/engine" -c "$module_dir/switch/iza/entry.c" -o "$work/entry.o"
 "${cross}ld" --no-undefined --fatal-warnings -T "$module_dir/switch/iza/entry.ld" "$work/entry.o" -o "$work/entry.elf"
 "${cross}objcopy" -O binary -j .text "$work/entry.elf" "$module_dir/switch/iza/native.bin"
 node - "$platform_dir" "$module_dir" "$work" <<'JS'
@@ -81,14 +84,17 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const [root, moduleDir, work] = process.argv.slice(2);
 const archive = require(path.join(root, 'core/archive.cjs'));
-const {prepare} = require(path.join(root, 'engines/iz2s-core/tools/prepare-sd-app.cjs'));
+const pkg = require(path.join(root, 'core/console/sd-launcher/package.cjs'));
 (async () => {
-  const packaged = path.join(moduleDir, 'iz2s-store.izm');
+  const packaged = path.join(moduleDir, 'iz2s-store.module.zip');
+  const prepared = path.join(work, 'prepared');
+  const result = await pkg.build(path.join(moduleDir, 'switch/iza'), prepared, {sb4:true, includeLibrary:false});
+  if (pkg.decode(result.bytes).nativeAbi !== 7 || result.id !== 'iz2s-store') throw Error('Unexpected IZA layout');
   await fs.writeFile(packaged, await archive.pack(moduleDir));
-  const result = await prepare(packaged, path.join(work, 'prepared'));
-  if (result.abi !== 7 || result.id !== 'iz2s-store') throw Error('Unexpected IZA layout');
   const folder = path.join(work, 'sd', 'iz2s', 'modules', result.id);
-  await fs.cp(result.folder, folder, {recursive: true});
+  await fs.mkdir(folder, {recursive:true});
+  for (const name of ['launcher.iza', 'sd-bundle.json', ...result.assets.map(asset=>asset.path)])
+    await fs.copyFile(path.join(prepared, name), path.join(folder, name));
   console.log(packaged);
 })().catch(error => { console.error(error.stack); process.exitCode = 1; });
 JS
@@ -109,6 +115,8 @@ print(target)
 PY
 
 cp "$work/sd/iz2s/modules/iz2s-store/launcher.iza" "$output/iz2s-store.iza"
+cp "$work/sd/iz2s/modules/iz2s-store/"*.izdata "$output/"
+cp "$work/engine/engine-report.json" "$output/engine-report.json"
 fi
 
 if [ "${IZ_STORE_CHECK:-0}" = 1 ]; then

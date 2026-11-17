@@ -22,7 +22,7 @@
 void store_migrate(const char *root);
 
 typedef enum { PACKAGE_IZM, PACKAGE_NRO, PACKAGE_IZM_NRO } PackageKind;
-typedef enum { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, EXTERNAL, UNAVAILABLE } InstallState;
+typedef enum { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, EXTERNAL, UNAVAILABLE, SELF_ENTRY } InstallState;
 
 typedef struct {
     char name[80];
@@ -70,6 +70,12 @@ uint32_t store_read_artwork_slots(const Store *store, const StoreSettings *setti
 unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings);
 uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]);
+#ifdef IZ_STORE_STANDALONE
+void store_set_running_nro(const char *path, const char *version);
+#else
+void store_set_running_iza(const char *version);
+#endif
+const App *store_self_entry(const Store *store);
 void store_refresh(const Store *store, App *app);
 void store_sync_icon(const Store *store, const App *app, const char *artwork);
 void store_sync_icon_pixels(const Store *store, const App *app, const void *rgba);

@@ -1,11 +1,45 @@
 #include <sb4/native-app.h>
+#include <sb4/native-services.h>
+#include "engine-asset.h"
+
 typedef uint32_t (*StoreEvent)(IzNativeApp *, uint32_t);
+typedef struct { IzNativeImage image; uint32_t started; } State;
 
 __attribute__((section(".text.iz_app")))
 uint32_t iz_app(IzNativeApp *app, uint32_t event) {
     const Sb4Compat *services = sb4ModuleCompat(app);
-    if (!services) return event == IZ_NATIVE_STOP ? 0 : 1;
-    StoreEvent dispatch = (StoreEvent)services->resolve_c("sb4IZ2SStoreEvent");
-    if (!dispatch) return event == IZ_NATIVE_STOP ? 0 : 1;
-    return dispatch(app, event);
+    if (!services || !app->data || app->data_bytes < sizeof(State))
+        return event == IZ_NATIVE_STOP ? 0 : 0xe870;
+    State *state = app->data;
+    IzNativeApp3 *loader = (IzNativeApp3 *)app;
+    if (event == IZ_NATIVE_INIT) {
+        uint32_t (*version)(void) = (uint32_t (*)(void))services->resolve_c(SB4_NATIVE_SERVICES_IMPORT);
+        if (!version || version() != SB4_NATIVE_SERVICES_VERSION) {
+            const char message[] = "Update IZ2S Platform: native services v1 required.\n";
+            if (app->write_file) app->write_file(app, "startup-error.txt", message, sizeof message - 1);
+            return 0xe871;
+        }
+        if (!loader->load_image || !loader->unload_image) return 0xe873;
+        uint32_t rc = loader->load_image(app, STORE_ENGINE_ASSET, &state->image);
+        if (rc) return rc;
+        if (state->image.version != 1 || state->image.bytes < sizeof state->image || !state->image.entry)
+            return 0xe874;
+        rc = ((StoreEvent)state->image.entry)(app, event);
+        if (!rc) state->started = 1;
+        return rc;
+    }
+    if (event == IZ_NATIVE_STOP) {
+        if (state->started) {
+            uint32_t rc = ((StoreEvent)state->image.entry)(app, event);
+            if (rc) return rc;
+            state->started = 0;
+        }
+        if (state->image.token) {
+            uint32_t rc = loader->unload_image(app, state->image.token);
+            if (rc) return rc;
+            state->image.token = 0;
+        }
+        return 0;
+    }
+    return state->started ? ((StoreEvent)state->image.entry)(app, event) : 0xe875;
 }

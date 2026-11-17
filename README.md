@@ -16,9 +16,9 @@ A homebrew store for Nintendo Switch 2.
 
 ## Install on IZ2S
 
-**IZ2S Platform 0.25 or later is required.** Restart the IZ2S session after updating the platform.
+**Use the updated IZ2S Platform 0.25 with native services v1.** Restart the IZ2S session after updating the platform. On a system that already has native services v1, update the Store by installing the new ZIP. The SDK is part of IZ2S Platform.
 
-- **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) on your PC. Copy the extracted `iz2s/` folder to the root of the card. To copy the executable manually, save `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. Open the **IZ2S Store** tile.
+- **From microSD.** Extract [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) on your PC. Copy the extracted `iz2s/` folder to the root of the card. Keep `launcher.iza`, `sd-bundle.json` and its `asset-*.izdata` file together in `/iz2s/modules/iz2s-store/`. The executable alone is not a complete installation. Open the **IZ2S Store** tile.
 - **From IZ2S Platform on PC.** Connect the console via PC Link, open **App library → Add app**, and select `iz2s-store-iza-sd.zip` directly. The panel imports the ZIP. If the import is still queued, open **Add App** on the console.
 
 The Store installs apps to `/iz2s/modules/<id>/launcher.iza` or `/iz2s/modules/<id>/launcher.nro`.
@@ -40,3 +40,11 @@ For a local catalog, place `catalog.tsv` and `artwork.bin` in `/iz2s/modules/iz2
 Create a separate public GitHub repository. Put `catalog.tsv` and `artwork.bin` at the root of the `main` branch. Open `catalog.tsv`, click **Raw**, and copy the URL into IZ2S Store.
 
 See the [catalog format](docs/catalog-format.md) to list IZA releases and their companion files.
+
+## Update the Store
+
+Open **Settings → Store update**. The selected catalog must contain the official IZ2S Store release for your edition: IZA on IZ2S, NRO on kaiHEN. The Store verifies the downloaded files, keeps the previous executable and asks you to reopen the app. Rebuilt releases with the same version are detected by SHA-256.
+
+Both editions contain their own application code. IZA uses SDK services for networking, TLS, the system keyboard and threads. Catalogs and artwork are published separately.
+
+See [building and native modules](docs/building.md) for SDK requirements and checks.

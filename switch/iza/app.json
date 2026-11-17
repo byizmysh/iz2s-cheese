@@ -19,6 +19,17 @@
     "format": "iz2s.native-app",
     "abi": 7,
     "code": "native.bin",
-    "dataBytes": 4096
+    "dataBytes": 4096,
+    "capabilities": [
+      "engine-image"
+    ],
+    "assets": [
+      {
+        "file": "asset-e418a365ea0c78089654a12b3f57434c809e9e6dcaf0673e576a259997dd4314.izdata",
+        "path": "asset-e418a365ea0c78089654a12b3f57434c809e9e6dcaf0673e576a259997dd4314.izdata",
+        "bytes": 93944,
+        "sha256": "e418a365ea0c78089654a12b3f57434c809e9e6dcaf0673e576a259997dd4314"
+      }
+    ]
   }
 }

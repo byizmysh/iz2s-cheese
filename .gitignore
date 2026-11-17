@@ -5,3 +5,5 @@ __pycache__/
 /switch/iza/*.spv
 /switch/iza/native.bin
 /switch/iza/assets/
+/switch/iza/asset-*.izdata
+/iz2s-store.module.zip

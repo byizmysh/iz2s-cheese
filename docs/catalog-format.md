@@ -46,3 +46,7 @@ Use the launcher's SHA-256 as the directory name. IZA packages are
 supported by the IZ2S edition of the Store.
 
 </details>
+
+## Store updates
+
+Reserve `iz2s-store` for the Store itself. Use an official release URL of the form `https://github.com/byizmysh/iz2s-store/releases/download/v<VERSION>/iz2s-store.iza` or its `.nro` counterpart. A feed has unique app IDs, so publish a feed for each Store edition when including its self-update entry. IZA needs its companion `file` row; publish that exact `.izdata` asset in the same release. List sizes and SHA-256 from the actual release files, including same-version rebuilds. Updates are available from Settings; the Store cannot remove itself.

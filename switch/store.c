@@ -158,8 +158,7 @@ static bool parts(char *line, char *values[], unsigned count) {
 
 static bool app_line(Package *app, char *line) {
     char *values[7];
-    if (!parts(line, values, 7) || !identifier(values[0]) ||
-        !strcmp(values[0], "iz2s-store")) return false;
+    if (!parts(line, values, 7) || !identifier(values[0])) return false;
     if (!strcmp(values[1], "nro")) app->kind = PACKAGE_NRO;
     else if (!strcmp(values[1], "izm-nro")) app->kind = PACKAGE_IZM_NRO;
     else if (!strcmp(values[1], "iza") || !strcmp(values[1], "izm")) app->kind = PACKAGE_IZM;
@@ -450,8 +449,67 @@ static bool conflict(const char *directory, const Package *app) {
 }
 #endif
 
+static bool is_store_entry(const Package *package) {
+    return !strcmp(package->id, "iz2s-store");
+}
+
+const App *store_self_entry(const Store *store) {
+    for (unsigned i = 0; i < store->count; ++i)
+        if (is_store_entry(&store->apps[i].package)) return &store->apps[i];
+    return NULL;
+}
+
+static const char *running_version;
+#ifdef IZ_STORE_STANDALONE
+static const char store_program[] = "/switch/iz2s-store/iz2s-store.nro";
+void store_set_running_nro(const char *path, const char *version) {
+    if (path && !strncmp(path, "sdmc:", 5)) path += 5;
+    running_version = path && !strcmp(path, store_program) ? version : NULL;
+}
+#else
+static const char store_program[] = MODULE_DIR "/iz2s-store/launcher.iza";
+void store_set_running_iza(const char *version) { running_version = version; }
+#endif
+
+static bool stable_version(const char *value, unsigned parts[3]) {
+    for (unsigned i = 0; i < 3; ++i) {
+        size_t digits = strspn(value, "0123456789");
+        if (!digits || digits > 4 || value[digits] != (i == 2 ? '\0' : '.')) return false;
+        parts[i] = (unsigned)strtoul(value, NULL, 10);
+        value += digits + (i < 2);
+    }
+    return true;
+}
+
+static bool self_update_available(const Store *store, const Package *package) {
+    unsigned current[3], candidate[3];
+#ifdef IZ_STORE_STANDALONE
+    if (package->kind != PACKAGE_NRO || package->count != 1) return false;
+#else
+    if (package->kind != PACKAGE_IZM || package->count < 2) return false;
+#endif
+    if (!running_version || !stable_version(running_version, current) || !stable_version(package->version, candidate)) return false;
+    char expected[RELEASE_URL_MAX];
+    int length = snprintf(expected, sizeof expected,
+        "https://github.com/byizmysh/iz2s-store/releases/download/v%s/iz2s-store.%s",
+        package->version, store_extension(package->kind));
+    if (length < 0 || (size_t)length >= sizeof expected || strcmp(expected, package->release_url)) return false;
+    for (unsigned i = 0; i < 3; ++i)
+        if (candidate[i] != current[i]) return candidate[i] > current[i];
+    char installed[STORE_PATH];
+    return path(installed, "%s%s", store->root, store_program) && file_state(installed) == REGULAR &&
+        !matches(installed, &package->files[0]);
+}
+
 void store_refresh(const Store *store, App *app) {
     app->installed_version[0] = '\0';
+    if (is_store_entry(&app->package)) {
+        app->state = SELF_ENTRY;
+        if (running_version)
+            snprintf(app->installed_version, sizeof app->installed_version, "%s", running_version);
+        if (self_update_available(store, &app->package)) app->state = UPDATE_AVAILABLE;
+        return;
+    }
 #ifdef IZ_STORE_STANDALONE
     if (app->package.kind == PACKAGE_IZM) { app->state = UNAVAILABLE; return; }
 #endif
@@ -938,8 +996,52 @@ static void cleanup_old(const char *directory, const Package *previous, const Pa
     }
 }
 
+#ifdef IZ_STORE_STANDALONE
+static bool update_store_nro(const Store *store, const Package *package, Progress progress,
+                             char out[STORE_MESSAGE]) {
+    if (!self_update_available(store, package)) return message(out, "Open the official release to update the Store.");
+    char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], stage[STORE_PATH];
+    module_paths(store, package, directory, active, backup);
+    if (!path(stage, "%s/.store-update.tmp", directory) ||
+        !path(backup, "%s/.store-previous.nro.bak", directory))
+        return message(out, "The Store path is too long.");
+    if (file_state(active) != REGULAR || file_state(backup) == OTHER || file_state(stage) == OTHER)
+        return message(out, "Could not update the Store at its standard SD path.");
+    if (matches(active, &package->files[0]))
+        return message(out, "This update is already saved. Reopen IZ2S Store.");
+    if (file_state(stage) == REGULAR && unlink(stage))
+        return message(out, "Could not clear an interrupted update.");
+    if (!stage_github(package, 0, stage, progress, 0, package->files[0].bytes, out)) return false;
+    if (cancelled(progress) || !valid_image(stage, package)) {
+        unlink(stage);
+        return message(out, cancelled(progress) ? "Download cancelled." : "The Store update is incompatible.");
+    }
+    if ((file_state(backup) == REGULAR && unlink(backup)) || rename(active, backup)) {
+        unlink(stage);
+        return message(out, "Could not keep a copy of the previous Store.");
+    }
+    if (rename(stage, active)) {
+        rename(backup, active);
+        unlink(stage);
+        commit(directory);
+        return message(out, "Could not install the Store update.");
+    }
+    if (!commit(directory)) return message(out, "Could not confirm the update on SD.");
+    snprintf(out, STORE_MESSAGE, "Updated to %s. Reopen IZ2S Store.", package->version);
+    return true;
+}
+#endif
+
 bool store_install(const Store *store, const App *app, Progress progress, char out[STORE_MESSAGE]) {
     Package package = app->package;
+    if (is_store_entry(&package)) {
+#ifdef IZ_STORE_STANDALONE
+        return update_store_nro(store, &package, progress, out);
+#else
+        if (!self_update_available(store, &package))
+            return message(out, "No compatible official Store update in this catalog.");
+#endif
+    }
 #ifdef IZ_STORE_STANDALONE
     if (package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZ2S.");
 #endif
@@ -954,11 +1056,12 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
 #ifndef IZ_STORE_STANDALONE
     if (conflict(directory, &package)) return message(out, "The application folder has conflicting files.");
 #endif
-    if (!recover(directory, active, backup, &package))
+    bool self = is_store_entry(&package);
+    if (self ? file_state(backup) != ABSENT : !recover(directory, active, backup, &package))
         return message(out, "The application folder has conflicting files.");
     bool exists = file_state(active) != ABSENT;
     App old = {0};
-    if (exists && !read_receipt(directory, &package, active, &old))
+    if (exists && !read_receipt(directory, &package, active, &old) && !self)
         return message(out, "This copy is managed outside this store.");
 
     uint64_t total = 0;
@@ -1029,17 +1132,28 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
     if (exists && (rename(active, backup) || !commit(directory)))
         return message(out, "Could not keep the previous version.");
     if (rename(stage, active)) {
-        if (exists) recover(directory, active, backup, &package);
+        if (exists) {
+            if (self) { rename(backup, active); commit(directory); }
+            else recover(directory, active, backup, &package);
+        }
         return message(out, "Could not activate the package.");
     }
     if (!commit(directory)) return message(out, "The SD card did not confirm the installation.");
-    if (exists && unlink(backup) == 0) cleanup_old(directory, &old.package, &package);
+    if (self && exists) {
+        char previous[STORE_PATH];
+        path(previous, "%s/.store-previous.iza.bak", directory);
+        if (file_state(previous) == REGULAR) unlink(previous);
+        if (rename(backup, previous)) return message(out, "Update saved; previous copy remains in the recovery file.");
+        /* Keep old content-addressed resources so the backup remains launchable. */
+    } else if (exists && unlink(backup) == 0) cleanup_old(directory, &old.package, &package);
     if (!commit(directory)) return message(out, "The SD card did not confirm cleanup.");
-    snprintf(out, STORE_MESSAGE, "%s %s", exists ? "Updated to" : "Installed", package.version);
+    snprintf(out, STORE_MESSAGE, "%s %s%s", exists ? "Updated to" : "Installed", package.version,
+             self ? ". Reopen IZ2S Store." : "");
     return true;
 }
 
 bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
+    if (is_store_entry(&app->package)) return message(out, "Exit the Store before removing it.");
 #ifdef IZ_STORE_STANDALONE
     if (app->package.kind == PACKAGE_IZM) return message(out, "IZA apps require IZ2S.");
 #endif

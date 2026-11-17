@@ -17,10 +17,21 @@ check_iza, check_nro = (value == '1' for value in sys.argv[2:])
 if check_iza:
     entry = 'iz2s/modules/iz2s-store/launcher.iza'
     with ZipFile(output / 'iz2s-store-iza-sd.zip') as archive:
-        assert set(archive.namelist()) == {
-            entry, 'iz2s/modules/iz2s-store/sd-bundle.json'
-        }
+        bundle = json.loads(archive.read('iz2s/modules/iz2s-store/sd-bundle.json'))
+        companions = bundle['assets']
+        assert len(companions) == 1
+        assert set(archive.namelist()) == {entry, 'iz2s/modules/iz2s-store/sd-bundle.json',
+            *('iz2s/modules/iz2s-store/' + item['file'] for item in companions)}
+        for item in companions:
+            engine = archive.read('iz2s/modules/iz2s-store/' + item['file'])
+            assert len(engine) == item['bytes'] and hashlib.sha256(engine).hexdigest() == item['sha256']
+            assert engine.startswith(b'IZNATRL1')
+            assert b'sb4IZ2SStoreEvent' not in engine
+            assert b'sslConnectionDoHandshake' in engine and b'swkbdShow' in engine
         iza = archive.read(entry)
+        assert bundle['launcher']['sha256'] == hashlib.sha256(iza).hexdigest()
+        assert b'sb4IZ2SStoreEvent' not in iza
+        assert b'sb4NativeServicesVersion' in iza
     assert iza == (output / 'iz2s-store.iza').read_bytes()
     assert iza.startswith(b'IZSDAPP1')
     artwork = iza.index(b'IZSTOREA')

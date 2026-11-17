@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#ifdef IZ_STORE_HOSTED
+#ifdef IZ_STORE_MODULE
 #include <sb4/native-app.h>
 #endif
 
@@ -118,7 +118,7 @@ static void run_task(void *context) {
             if (task->command == STARTUP_CHECK) write_report(task, task->message);
         }
     } else {
-        if (task->command == INSTALL)
+        if (task->command == INSTALL || task->command == UPDATE_STORE)
             task->ok = store_install(task->current, task->app, (Progress){.report = progress, .context = task, .cancel = &task->cancel}, task->message);
         else task->ok = store_remove(task->current, task->app, task->message);
         *task->result = *task->current;
@@ -135,10 +135,11 @@ static bool start_task(Task *task, Thread *thread, View *view, const Store *stor
     task->result = next;
     task->command = command;
     task->settings = view->settings;
-    task->app = view->count ? &store->apps[view->visible[view->cursor]] : NULL;
+    task->app = command == UPDATE_STORE ? store_self_entry(store) :
+        view->count ? &store->apps[view->visible[view->cursor]] : NULL;
     atomic_store(&task->done, false);
     atomic_store(&task->cancel, false);
-    view->cancellable = command == INSTALL && task->app && task->app->package.release_url[0];
+    view->cancellable = (command == INSTALL || command == UPDATE_STORE) && task->app && task->app->package.release_url[0];
     snprintf(view->source, sizeof view->source, "%s", view->cancellable ? task->app->package.release_url : "");
     snprintf(view->download_title, sizeof view->download_title, "%s", view->cancellable ? task->app->package.title : "");
     atomic_store(&task->percent, 0);
@@ -279,7 +280,7 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
         threadWaitForExit(&session->thread);
         threadClose(&session->thread);
         unsigned selected = view->count ? view->visible[view->cursor] : STORE_MAX_APPS;
-        bool app_action = task->command == INSTALL || task->command == REMOVE;
+        bool app_action = task->command == INSTALL || task->command == UPDATE_STORE || task->command == REMOVE;
         bool changed = app_action || task->command == REFRESH || (task->ok && task->command != CHECK_NETWORK);
         if (changed) session->active ^= 1u;
         store = &catalogs[session->active];
@@ -302,10 +303,12 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
             if (cursor < view->count) view->cursor = cursor;
             else view->screen = CATALOG;
         }
-        if (task->command == CHECK_NETWORK || task->command == FETCH_LIST || task->command == STARTUP_CHECK) {
+        if (task->command == CHECK_NETWORK || task->command == FETCH_LIST ||
+            task->command == STARTUP_CHECK || task->command == UPDATE_STORE) {
             view->screen = SETTINGS_RESULT;
             snprintf(view->result_title, sizeof view->result_title, "%s",
-                task->command == CHECK_NETWORK ? "GitHub connection test" : "Catalog download");
+                task->command == CHECK_NETWORK ? "GitHub connection test" :
+                task->command == UPDATE_STORE ? "Store update" : "Catalog download");
         }
         if (session->check_on_start && task->command == REFRESH) {
             session->check_on_start = false;
@@ -367,7 +370,7 @@ static void close_session(Session *session) {
     }
 }
 
-#ifdef IZ_STORE_HOSTED
+#ifdef IZ_STORE_MODULE
 enum { STORE_FRAME_OFFSET = 0x200000 };
 static IzNativeApp *host_owner;
 static Session hosted_session;
@@ -395,12 +398,16 @@ uint32_t iz_store_iza_event(IzNativeApp *app, uint32_t event) {
             app->controls_bytes < STORE_FRAME_OFFSET + SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t)) return 1;
         memset(session, 0, sizeof *session);
         if (!hosted_artwork(session, app)) return 1;
+        store_set_running_iza(IZ_STORE_VERSION);
         host_owner = app;
         session->held = app->buttons(app);
         open_session(session, true);
     } else if (app != host_owner || !app) return 0;
     else if (event == IZ_NATIVE_STOP) {
-        if (session->view.busy && !atomic_load(&session->task.done)) return IZ_NATIVE_STOP_PENDING;
+        if (session->view.busy && !atomic_load(&session->task.done)) {
+            atomic_store(&session->task.cancel, true);
+            return IZ_NATIVE_STOP_PENDING;
+        }
         close_session(session);
         host_owner = NULL;
         return 0;
@@ -418,7 +425,8 @@ uint32_t iz_store_iza_event(IzNativeApp *app, uint32_t event) {
     return 0;
 }
 #else
-int main(void) {
+int main(int argc, char **argv) {
+    store_set_running_nro(argc > 0 ? argv[0] : NULL, IZ_STORE_VERSION);
     bool mounted = !fsdevGetDeviceFileSystem("sdmc");
     if (mounted && R_FAILED(fsdevMountSdmc())) return 1;
     Result result = romfsInit();
