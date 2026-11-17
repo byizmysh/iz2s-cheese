@@ -76,7 +76,7 @@ static bool check_github(Task *task) {
 static void write_report(const Task *task, const char *catalog) {
     FILE *file = fopen(CHECK_REPORT, "w");
     if (!file) return;
-    bool ok = fprintf(file, "IZ Homebrew Store network check\nNetwork: %s\n%s\nGitHub: %s\nCatalog URL: %s\nCatalog: %s\n",
+    bool ok = fprintf(file, "IZ2S Store network check\nNetwork: %s\n%s\nGitHub: %s\nCatalog URL: %s\nCatalog: %s\n",
         task->network, task->addresses, task->github, task->settings.url, catalog) > 0;
     if (fclose(file)) ok = false;
     if (ok && R_SUCCEEDED(fsdevCommitDevice("sdmc")) && task->command == STARTUP_CHECK) {
@@ -230,6 +230,7 @@ static void sync_artwork(Session *session, Store *store) {
 static void open_session(Session *session, bool hosted) {
     memset(catalogs, 0, sizeof catalogs);
     session->view.inside_iz2s = hosted;
+    store_migrate(SD_ROOT);
     session->check_on_start = access(CHECK_REQUEST, F_OK) == 0;
     session->dirty = true;
     store_settings_read(SD_ROOT, &session->view.settings);

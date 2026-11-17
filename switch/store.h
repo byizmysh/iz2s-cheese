@@ -10,8 +10,10 @@
 #define STORE_MAX_FILES 17
 #define STORE_PATH 512
 #define STORE_MESSAGE 160
-#define STORE_DIR "/iz2s/store"
+#define STORE_DIR "/iz2s/iz2s-store"
 #define MODULE_DIR "/iz2s/modules"
+
+void store_migrate(const char *root);
 
 typedef enum { PACKAGE_IZM, PACKAGE_NRO, PACKAGE_IZM_NRO } PackageKind;
 typedef enum { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, EXTERNAL, UNAVAILABLE } InstallState;

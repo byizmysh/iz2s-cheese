@@ -355,7 +355,7 @@ static void dialog(Canvas *canvas, const App *app, const View *view) {
         label(canvas,132,190,1016,NORMAL,muted,"Enter its raw GitHub HTTPS URL or private LAN HTTP URL in Catalog URL.");
         label(canvas,132,235,1016,SMALL,dim,"Download from");
         wrap(canvas,132,270,1016,8,SMALL,ink,view->settings.url[0] ? view->settings.url : "Set Catalog URL in Settings first.");
-        label(canvas,132,490,1016,SMALL,muted,"Saved to /iz2s/store/remote.tsv and loaded automatically on the next launch.");
+        label(canvas,132,490,1016,SMALL,muted,"Saved to /iz2s/iz2s-store/remote.tsv and loaded automatically on the next launch.");
         if (view->settings.url[0]) action_button(canvas,660,549,235,"A","Download",true);
         action_button(canvas,920,549,225,"B","Back",false);
         return;

@@ -6,12 +6,12 @@ Switch 2 homebrew menu. The interface is in English.
 
 ## Install
 
-- **IZlauncher** — extract `IZ-Homebrew-Store-SD.zip` to the SD root, or copy
-  `IZ2S-Store.iza` as `/iz2s/modules/iz-homebrew-store/launcher.iza`. This
+- **IZlauncher** — extract `iz2s-store-iza-sd.zip` to the SD root, or copy
+  `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. This
   edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.6
   hosted service. After updating the runtime, restart IZlauncher.
-- **Switch 2 homebrew menu** — copy `IZ2S-Store-Standalone.nro` as
-  `/switch/iz-homebrew-store/iz-homebrew-store.nro`. The standalone build
+- **Switch 2 homebrew menu** — copy `iz2s-store.nro` as
+  `/switch/iz2s-store/iz2s-store.nro`. The standalone build
   needs a Switch 2 homebrew environment with libounce support.
 
 ## Add a catalog
@@ -20,14 +20,19 @@ Switch 2 homebrew menu. The interface is in English.
 2. Enter the raw HTTPS URL of an external GitHub `catalog.tsv`, or its HTTP URL
    on a private IPv4 LAN server.
 3. Choose **Download catalog**. The validated list is cached on the SD card
-   at `/iz2s/store/remote.tsv` and reused when the store opens.
+   at `/iz2s/iz2s-store/remote.tsv` and reused when the store opens.
 
-You can also copy a catalog to `/iz2s/store/catalog.tsv` on the SD card and
+You can also copy a catalog to `/iz2s/iz2s-store/catalog.tsv` on the SD card and
 press **Y** to reload it. A downloaded list can add to that local list or
 replace its online entries by ID. Clear the URL to use only the local file.
 
 The repository and release packages ship without a catalog or application
 payloads. A fresh installation opens with an empty list and no configured URL.
+
+When upgrading from an older Store installation, remove its old launcher
+file to avoid duplicate tiles. The new Store moves its settings, cache,
+artwork and local packages from the former data folder on first launch if
+the new folder is absent.
 
 ## Use the store
 
@@ -58,7 +63,7 @@ Downloads go directly from the console to the release server. A LAN server
 hosting the catalog does not need to proxy the releases.
 
 Optional catalog artwork can be copied separately to
-`/iz2s/store/icons/<id>.rgba` as exactly 96 × 96 straight RGBA pixels.
+`/iz2s/iz2s-store/icons/<id>.rgba` as exactly 96 × 96 straight RGBA pixels.
 The store uses fallback artwork if a card has no image.
 
 ## Build

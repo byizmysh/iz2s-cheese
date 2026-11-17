@@ -87,6 +87,15 @@ static bool commit(const char *directory) {
 
 static bool flush(FILE *file) { return fflush(file) == 0 && fsync(fileno(file)) == 0; }
 
+void store_migrate(const char *root) {
+    char from[STORE_PATH], to[STORE_PATH], parent[STORE_PATH];
+    struct stat st;
+    if (!path(from, "%s/iz2s/store", root) || !path(to, "%s" STORE_DIR, root) ||
+        !path(parent, "%s/iz2s", root) || lstat(from, &st) || !S_ISDIR(st.st_mode) ||
+        lstat(to, &st) == 0 || errno != ENOENT) return;
+    if (rename(from, to) == 0) commit(parent);
+}
+
 const char *store_extension(PackageKind kind) { return kind == PACKAGE_IZM ? "iza" : "nro"; }
 
 static const char *kind_field(PackageKind kind) {
@@ -148,7 +157,7 @@ static bool parts(char *line, char *values[], unsigned count) {
 static bool app_line(Package *app, char *line) {
     char *values[7];
     if (!parts(line, values, 7) || !identifier(values[0]) ||
-        !strcmp(values[0], "iz-homebrew-store")) return false;
+        !strcmp(values[0], "iz2s-store")) return false;
     if (!strcmp(values[1], "nro")) app->kind = PACKAGE_NRO;
     else if (!strcmp(values[1], "izm-nro")) app->kind = PACKAGE_IZM_NRO;
     else if (!strcmp(values[1], "izm")) app->kind = PACKAGE_IZM;
@@ -761,7 +770,7 @@ bool store_install(const Store *store, const App *app, Progress progress, char o
     if (file_state(stage) == REGULAR && unlink(stage))
         return message(out, "Could not clear an interrupted transfer.");
     char payload[STORE_PATH], source[STORE_PATH], target[STORE_PATH], copy[STORE_PATH];
-    path(payload, "%s/iz2s/store/payloads/%s/%s", store->root, package.id, package.files[0].digest);
+    path(payload, "%s" STORE_DIR "/payloads/%s/%s", store->root, package.id, package.files[0].digest);
     path(source, "%s/%s", payload, package.files[0].name);
     if (package.release_url[0]) {
         if (!stage_github(&package, stage, progress, out)) return false;

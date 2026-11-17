@@ -426,7 +426,7 @@ static bool request_url(const char *url, Request mode, uint64_t size, DownloadSi
         }
         char request[LOCATION_MAX + 200];
         int length = snprintf(request, sizeof request, "%s %s HTTP/1.1\r\nHost: %s:%s\r\n"
-            "User-Agent: IZ-Homebrew-Store\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
+            "User-Agent: IZ2S-Store\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
             mode == RELEASE_HEAD ? "HEAD" : "GET", path, host, port);
         if (length < 0 || (size_t)length >= sizeof request) { error_message(out, "The download URL is too long."); break; }
         Tls tls = {.fd = connect_to(host, port, out), .encrypted = encrypted};

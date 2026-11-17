@@ -9,7 +9,7 @@ export DEVKITPRO
 cross=${IZ_AARCH64_PREFIX:-"$DEVKITPRO/devkitA64/bin/aarch64-none-elf-"}
 include="$DEVKITPRO/../sb4/include"
 if [ -f "$platform_dir/core/archive.cjs" ]; then
-    output=${IZ_STORE_OUT:-"$platform_dir/dist/iz-homebrew-store"}
+    output=${IZ_STORE_OUT:-"$platform_dir/dist/iz2s-store"}
 else
     output=${IZ_STORE_OUT:-"$module_dir/.build"}
 fi
@@ -39,9 +39,9 @@ if [ "$build_nro" = 1 ]; then
     version=$(node -p 'require(process.argv[1]).version' "$module_dir/module.json")
     tools="$DEVKITPRO/tools/bin"
     "$tools/nacptool" --create 'IZ2S Store' IZMYSH "$version" "$work/standalone.nacp"
-    "$tools/elf2nro" "$work/standalone.elf" "$output/IZ2S-Store-Standalone.nro" \
+    "$tools/elf2nro" "$work/standalone.elf" "$output/iz2s-store.nro" \
         --nacp="$work/standalone.nacp" --icon="$work/icon.jpg" --romfsdir="$work/romfs"
-    python3 - "$output/IZ2S-Store-Standalone.nro" "$output/IZ2S-Store-Standalone-SD.zip" <<'PY'
+    python3 - "$output/iz2s-store.nro" "$output/iz2s-store-nro-sd.zip" <<'PY'
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
@@ -50,7 +50,7 @@ import sys
 source, target = map(Path, sys.argv[1:])
 stage = target.with_suffix('.tmp')
 with ZipFile(stage, 'w', ZIP_DEFLATED) as pack:
-    pack.write(source, 'switch/iz-homebrew-store/iz-homebrew-store.nro')
+    pack.write(source, 'switch/iz2s-store/iz2s-store.nro')
 os.replace(stage, target)
 print(target)
 PY
@@ -81,17 +81,17 @@ const [root, moduleDir, work] = process.argv.slice(2);
 const archive = require(path.join(root, 'core/archive.cjs'));
 const {prepare} = require(path.join(root, 'engines/iz2s-core/tools/prepare-sd-app.cjs'));
 (async () => {
-  const packaged = path.join(moduleDir, 'iz-homebrew-store.izm');
+  const packaged = path.join(moduleDir, 'iz2s-store.izm');
   await fs.writeFile(packaged, await archive.pack(moduleDir));
   const result = await prepare(packaged, path.join(work, 'prepared'));
-  if (result.abi !== 7 || result.id !== 'iz-homebrew-store') throw Error('Unexpected IZA layout');
+  if (result.abi !== 7 || result.id !== 'iz2s-store') throw Error('Unexpected IZA layout');
   const folder = path.join(work, 'sd', 'iz2s', 'modules', result.id);
   await fs.cp(result.folder, folder, {recursive: true});
   console.log(packaged);
 })().catch(error => { console.error(error.stack); process.exitCode = 1; });
 JS
 
-python3 - "$work/sd" "$output/IZ-Homebrew-Store-SD.zip" <<'PY'
+python3 - "$work/sd" "$output/iz2s-store-iza-sd.zip" <<'PY'
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
@@ -106,7 +106,7 @@ os.replace(stage, target)
 print(target)
 PY
 
-cp "$work/sd/iz2s/modules/iz-homebrew-store/launcher.iza" "$output/IZ2S-Store.iza"
+cp "$work/sd/iz2s/modules/iz2s-store/launcher.iza" "$output/iz2s-store.iza"
 fi
 
 if [ "${IZ_STORE_CHECK:-0}" = 1 ]; then
