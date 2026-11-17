@@ -2,6 +2,22 @@
 
 A homebrew store for Nintendo Switch 2.
 
+> [!IMPORTANT]
+> **Restrict the console's internet access before using online homebrew, while keeping local LAN access available for PC Link and FTP.** Configure and verify the restrictions before connecting the console to the internet.
+>
+> **Recommended on OpenWrt: [SWFence](https://github.com/byizmysh/SWFence).** Keep the console's general internet access blocked, preserve access to your selected local IPv4 network, and add only the GitHub destinations required by IZ2S Store as internet exceptions:
+>
+> ```text
+> github.com
+> raw.githubusercontent.com
+> release-assets.githubusercontent.com
+> objects.githubusercontent.com
+> ```
+>
+> These cover release links and the connection test, raw catalogs and thumbnails, release downloads, and supported download redirects. SWFence uses **exact domain names**: allowing `githubusercontent.com` alone does not allow its subdomains. Follow the SWFence setup and verification instructions; domain exceptions permit resolved destination IPs, which may be shared with other hosts.
+>
+> **Alternative: [90DNS](https://gitlab.com/a/90dns).** It filters Nintendo domains, but **does not block all internet traffic** and is not a GitHub-only firewall. Follow its console setup and testing instructions, including disabling IPv6 on Switch 2.
+
 <p>
   <a href="screenshots/catalog.png"><img src="screenshots/catalog.png" width="49%" alt="IZ2S Store catalog with app tiles and categories"></a>
   <a href="screenshots/app-details.png"><img src="screenshots/app-details.png" width="49%" alt="App details with the download button and publisher link"></a>
