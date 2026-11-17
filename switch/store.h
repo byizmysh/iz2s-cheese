@@ -6,8 +6,7 @@
 #include <stdint.h>
 #include "download.h"
 
-#define STORE_MAX_APPS 32
-_Static_assert(STORE_MAX_APPS <= 32, "Artwork masks use 32 bits");
+
 #define STORE_MAX_FILES 17
 #define STORE_PATH 512
 #define STORE_MESSAGE 160
@@ -52,7 +51,7 @@ typedef struct {
 typedef struct {
     char root[STORE_PATH];
     unsigned count, remote_count;
-    App apps[STORE_MAX_APPS];
+    App *apps;
 } Store;
 
 typedef struct { char url[RELEASE_URL_MAX]; bool online; } StoreSettings;
@@ -60,16 +59,18 @@ typedef struct { char url[RELEASE_URL_MAX]; bool online; } StoreSettings;
 typedef void (*StoreProgress)(void *, uint64_t done, uint64_t total);
 typedef struct { StoreProgress report; void *context; const atomic_bool *cancel; } Progress;
 
+void store_clear(Store *store);
+bool store_clone(Store *target, const Store *source);
 bool store_load(Store *store, const char *root, char message[STORE_MESSAGE]);
 bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
                            char message[STORE_MESSAGE]);
 void store_settings_read(const char *root, StoreSettings *settings);
 bool store_settings_write(const char *root, const StoreSettings *settings, char message[STORE_MESSAGE]);
 bool store_fetch_list(Store *store, const StoreSettings *settings, char message[STORE_MESSAGE]);
-uint32_t store_read_artwork_slots(const Store *store, const StoreSettings *settings,
-                                  uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted);
+bool store_read_artwork_icon(const Store *store, const StoreSettings *settings,
+                             unsigned slot, uint32_t *pixels);
 unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings);
-uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
+unsigned store_read_artwork(const Store *store, const StoreSettings *settings,
                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]);
 #ifdef IZ_STORE_STANDALONE
 void store_set_running_nro(const char *path, const char *version);

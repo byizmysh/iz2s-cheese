@@ -2,6 +2,7 @@
 #include "github-mark.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 enum { FILTER_ALL, FILTER_INSTALLED, FILTER_UPDATES, FILTER_TOOLS,
     FILTER_MEDIA, FILTER_EMULATORS, FILTER_GAMES, FILTERS };
@@ -128,6 +129,7 @@ static void wrap(Canvas *canvas, int x, int y, int width, int lines, int size, u
 
 static void cover(Canvas *canvas, int x, int y, int index, int size) {
     rectangle(canvas,x,y,size,size,0xff66534f);
+    index = index < 0 ? -1 : artwork_slot(canvas->art, (unsigned)index);
     if (index < 0 || !canvas->art->loaded[index]) {
         outline(canvas,x+size/4,y+size/4,size/2,size/2,3,muted);
         return;
@@ -579,6 +581,11 @@ static bool selected_filter(unsigned filter, const App *app) {
 
 void view_filter(View *view, const Store *store) {
     view->count = 0;
+    if (view->visible_capacity < store->count) {
+        unsigned *next = malloc((size_t)store->count * sizeof *next);
+        if (!next) { view->cursor = 0; view->failure = true; snprintf(view->message, sizeof view->message, "Not enough memory to display catalog."); return; }
+        free(view->visible); view->visible = next; view->visible_capacity = store->count;
+    }
     for (unsigned i = 0; i < store->count; ++i)
         if (selected_filter(view->filter, &store->apps[i])) view->visible[view->count++] = i;
     if (view->cursor >= view->count) view->cursor = view->count ? view->count-1 : 0;
@@ -799,9 +806,16 @@ bool artwork_read_icon(const char *folder, const App *app, uint32_t *pixels) {
     return ok;
 }
 
+int artwork_slot(const Artwork *art, unsigned index) {
+    for (unsigned i = 0; i < ART_CACHE_SIZE; ++i)
+        if (art->used[i] && art->indices[i] == index) return (int)i;
+    return -1;
+}
+
 void artwork_update(Artwork *art, const char *folder, const Store *store) {
-    for (unsigned i = 0; i < store->count; ++i) {
-        if (!art->loaded[i])
-            art->loaded[i] = artwork_read_icon(folder, &store->apps[i], art->icons[i]);
+    memset(art->used, 0, sizeof art->used);
+    for (unsigned i = 0; i < store->count && i < ART_CACHE_SIZE; ++i) {
+        art->used[i] = true; art->indices[i] = i;
+        art->loaded[i] = artwork_read_icon(folder, &store->apps[i], art->icons[i]);
     }
 }

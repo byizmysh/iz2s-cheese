@@ -29,3 +29,5 @@ python3 tests/self-update.py /path/to/release
 ```
 
 For the ARM64 lifecycle test, set `IZ_LINUX_SYSROOT`, `IZ_SB4_INCLUDE`, and `IZ_QEMU_AARCH64`, then run `sh tests/iza-lifecycle.sh /path/to/release`. It executes the actual module with simulated device services: relocation, missing SDK/imports, repeated startup, keyboard calls, DNS failure, TLS/socket cleanup and join-before-unload. Physical network and keyboard behavior still requires a console check.
+
+`python3 tests/catalog-size.py` exercises dynamic catalogs and both thumbnail formats with ASan/UBSan. On hosts where LeakSanitizer is unavailable under process tracing, use `ASAN_OPTIONS=detect_leaks=0`.

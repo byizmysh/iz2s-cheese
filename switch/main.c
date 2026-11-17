@@ -3,6 +3,8 @@
 #include <arpa/inet.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -22,7 +24,7 @@ typedef struct {
     Command command;
     atomic_bool done, cancel;
     atomic_uint percent;
-    bool ok;
+    bool ok, result_ready;
     char message[STORE_MESSAGE];
     char network[STORE_MESSAGE], addresses[STORE_MESSAGE], github[STORE_MESSAGE];
     StoreSettings settings;
@@ -91,13 +93,16 @@ static void refresh_apps(Store *store) {
 
 static void progress(void *context, uint64_t done, uint64_t total) {
     Task *task = context;
+    task->result_ready = false;
     if (total) atomic_store(&task->percent, (unsigned)(done * 99 / total));
 }
 
 static void run_task(void *context) {
     Task *task = context;
+    task->result_ready = false;
     if (task->command == REFRESH) {
         task->ok = store_refresh_catalog(task->result, SD_ROOT, &task->settings, task->message);
+        task->result_ready = true;
         if (task->ok) refresh_apps(task->result);
         network_status(task);
     } else if (task->command == FETCH_LIST || task->command == STARTUP_CHECK || task->command == CHECK_NETWORK) {
@@ -111,7 +116,11 @@ static void run_task(void *context) {
             }
         }
         if (task->command == FETCH_LIST || task->command == STARTUP_CHECK) {
-            *task->result = *task->current;
+            if (!store_clone(task->result, task->current)) {
+                task->ok = false; snprintf(task->message, sizeof task->message, "Not enough memory for catalog.");
+                atomic_store(&task->done, true); return;
+            }
+            task->result_ready = true;
             snprintf(task->result->root, sizeof task->result->root, "%s", SD_ROOT);
             task->ok = store_fetch_list(task->result, &task->settings, task->message);
             if (task->ok) refresh_apps(task->result);
@@ -121,7 +130,11 @@ static void run_task(void *context) {
         if (task->command == INSTALL || task->command == UPDATE_STORE)
             task->ok = store_install(task->current, task->app, (Progress){.report = progress, .context = task, .cancel = &task->cancel}, task->message);
         else task->ok = store_remove(task->current, task->app, task->message);
-        *task->result = *task->current;
+        if (!store_clone(task->result, task->current)) {
+                task->ok = false; snprintf(task->message, sizeof task->message, "Not enough memory for catalog.");
+                atomic_store(&task->done, true); return;
+            }
+        task->result_ready = true;
         unsigned index = (unsigned)(task->app - task->current->apps);
         store_refresh(task->result, &task->result->apps[index]);
     }
@@ -207,13 +220,14 @@ typedef struct {
     bool touched, check_on_start, dirty;
     const unsigned char *art_records;
     unsigned art_count;
-    uint32_t artwork_pending;
+    unsigned cache_next;
     uint64_t held;
 } Session;
 
 static void reset_artwork(Session *session, const Store *store) {
-    memset(artwork.loaded, 0, sizeof artwork.loaded);
-    session->artwork_pending = store->count == 32 ? UINT32_MAX : (1u << store->count) - 1u;
+    (void)store;
+    memset(artwork.used, 0, sizeof artwork.used);
+    session->cache_next = 0;
 }
 
 static bool embedded_icon(const Session *session, const App *app, uint32_t *pixels) {
@@ -228,42 +242,39 @@ static bool embedded_icon(const Session *session, const App *app, uint32_t *pixe
 }
 
 static void load_artwork(Session *session, const Store *store) {
-    if (!session->artwork_pending || (session->view.busy && !session->view.minimized)) return;
-
+    if (session->view.busy && !session->view.minimized) return;
     const View *view = &session->view;
     unsigned first = view->cursor / STORE_PAGE_SIZE * STORE_PAGE_SIZE;
-    uint32_t visible = 0;
-    if (view->screen == CATALOG) {
-        for (unsigned i = first; i < view->count && i < first + STORE_PAGE_SIZE; ++i)
-            visible |= 1u << view->visible[i];
-    } else if (view->screen == DETAILS && view->count) {
-        visible = 1u << view->visible[view->cursor];
+    unsigned end = first + STORE_PAGE_SIZE;
+    if (end > view->count) end = view->count;
+    if (view->screen != CATALOG) { first = view->cursor; end = view->count ? first + 1 : 0; }
+    for (unsigned item = first; item < end; ++item) {
+        unsigned index = view->visible[item];
+        if (artwork_slot(&artwork, index) >= 0) continue;
+        unsigned slot = session->cache_next++ % ART_CACHE_SIZE;
+        /* Keep every image on the current page while replacing older pages. */
+        for (unsigned n = 0; n < ART_CACHE_SIZE; ++n) {
+            bool visible = false;
+            for (unsigned j = first; j < end; ++j)
+                if (artwork.used[slot] && artwork.indices[slot] == view->visible[j]) visible = true;
+            if (!visible) break;
+            slot = session->cache_next++ % ART_CACHE_SIZE;
+        }
+        const App *app = &store->apps[index];
+        artwork.used[slot] = true; artwork.indices[slot] = index;
+        char folder[STORE_PATH];
+        int length = snprintf(folder, sizeof folder, "%s" STORE_DIR, store->root);
+        artwork.loaded[slot] = store_read_artwork_icon(store, &view->settings, index, artwork.icons[slot]) ||
+            embedded_icon(session, app, artwork.icons[slot]) ||
+            (length >= 0 && (size_t)length < sizeof folder && artwork_read_icon(folder, app, artwork.icons[slot])) ||
+            store_read_installed_icon(store, app, artwork.icons[slot]);
+        if (artwork.loaded[slot] && !view->busy) store_sync_icon_pixels(store, app, artwork.icons[slot]);
+        session->dirty = true;
     }
-
-    uint32_t wanted = session->artwork_pending & visible;
-    // Fill the visible page before drawing it. Use one slot per idle frame to warm the rest.
-    if (!wanted && !session->dirty && !view->busy)
-        wanted = session->artwork_pending & (0u - session->artwork_pending);
-    if (!wanted) return;
-
-    uint32_t loaded = store_read_artwork_slots(store, &view->settings, artwork.icons, wanted);
-    char folder[STORE_PATH];
-    int length = snprintf(folder, sizeof folder, "%s" STORE_DIR, store->root);
-    for (unsigned i = 0; i < store->count; ++i) {
-        uint32_t bit = 1u << i;
-        if (!(wanted & bit)) continue;
-        const App *app = &store->apps[i];
-        artwork.loaded[i] = (loaded & bit) || embedded_icon(session, app, artwork.icons[i]) ||
-            (length >= 0 && (size_t)length < sizeof folder && artwork_read_icon(folder, app, artwork.icons[i])) ||
-            store_read_installed_icon(store, app, artwork.icons[i]);
-        if (artwork.loaded[i] && !view->busy) store_sync_icon_pixels(store, app, artwork.icons[i]);
-        if (artwork.loaded[i] && (visible & bit)) session->dirty = true;
-    }
-    session->artwork_pending &= ~wanted;
 }
 
 static void open_session(Session *session, bool hosted) {
-    memset(catalogs, 0, sizeof catalogs);
+    for (unsigned i = 0; i < 2; ++i) store_clear(&catalogs[i]);
     session->view.inside_iz2s = hosted;
     store_migrate(SD_ROOT);
     session->check_on_start = access(CHECK_REQUEST, F_OK) == 0;
@@ -279,14 +290,16 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
     if (view->busy && atomic_load(&task->done)) {
         threadWaitForExit(&session->thread);
         threadClose(&session->thread);
-        unsigned selected = view->count ? view->visible[view->cursor] : STORE_MAX_APPS;
+        unsigned selected = view->count ? view->visible[view->cursor] : UINT_MAX;
         bool app_action = task->command == INSTALL || task->command == UPDATE_STORE || task->command == REMOVE;
-        bool changed = app_action || task->command == REFRESH || (task->ok && task->command != CHECK_NETWORK);
+        bool changed = task->result_ready && (app_action || task->command == REFRESH || (task->ok && task->command != CHECK_NETWORK));
         if (changed) session->active ^= 1u;
         store = &catalogs[session->active];
         if (changed && !app_action) reset_artwork(session, store);
-        if (app_action)
-            session->artwork_pending |= 1u << (unsigned)(task->app - task->current->apps);
+        if (changed && app_action) {
+            int slot = artwork_slot(&artwork, (unsigned)(task->app - task->current->apps));
+            if (slot >= 0) artwork.used[slot] = false;
+        }
         view->busy = false;
         view->failure = !task->ok && !atomic_load(&task->cancel);
         view->cancellable = false;
@@ -368,6 +381,8 @@ static void close_session(Session *session) {
         threadClose(&session->thread);
         session->view.busy = false;
     }
+    for (unsigned i = 0; i < 2; ++i) store_clear(&catalogs[i]);
+    free(session->view.visible); session->view.visible = NULL; session->view.visible_capacity = 0;
 }
 
 #ifdef IZ_STORE_MODULE
@@ -377,7 +392,7 @@ static Session hosted_session;
 
 static bool hosted_artwork(Session *session, const IzNativeApp *app) {
     const unsigned char *start = (const unsigned char *)app->controls + 1024;
-    if (memcmp(start,"IZSTOREA",8) || start[8] > STORE_MAX_APPS) return false;
+    if (memcmp(start,"IZSTOREA",8)) return false;
     session->art_count = start[8];
     const unsigned char *fonts = start + 12;
     const unsigned char *brand = fonts + sizeof artwork.fonts;

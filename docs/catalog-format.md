@@ -1,6 +1,6 @@
 # Catalog format
 
-Save `catalog.tsv` as UTF-8, with one record per line, literal tabs between fields, and a final newline. The first line is `IZSTORE2`. The file can contain up to 32 apps, each with a unique lowercase ID.
+Save `catalog.tsv` as UTF-8, with one record per line, literal tabs between fields, and a final newline. The first line is `IZSTORE2`. There is no fixed application-count limit. Each app must have a unique lowercase ID. Catalog records and filtered indices use dynamically allocated memory.
 
 | Record | Fields after the record name |
 | --- | --- |
@@ -29,7 +29,7 @@ github	https://github.com/OWNER/REPO/releases/download/v1.0.0/my-app.iza
 
 To update an entry, edit the version, release URL, byte count, and SHA-256 in the same commit. For a local copy of the exact release asset, use `wc -c < app.nro` and `sha256sum app.nro`. New publisher releases become visible after the catalog is updated and users refresh it.
 
-`artwork.bin` is optional. It begins with `IZART1\n` and one unsigned byte for the image count (1–32). Each record contains a 48-byte NUL-padded app ID followed by 96 × 96 RGBA pixels in row order. Use the same IDs as in the TSV.
+`artwork.bin` is optional. New packs use `IZART2\n` followed by an unsigned 32-bit little-endian image count. Each record contains a 48-byte NUL-padded app ID followed by 96 × 96 RGBA pixels in row order. Use the same IDs as in the TSV. Existing `IZART1\n` packs with their unsigned one-byte image count remain supported. Counts and file lengths are validated before reading images. Thumbnails are loaded on demand into a bounded cache; a larger catalog does not allocate every image in memory.
 
 <details>
 <summary>Offline IZA packages</summary>

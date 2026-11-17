@@ -29,7 +29,7 @@ Extract [`iz2s-store-nro-sd.zip`](https://github.com/byizmysh/iz2s-store/release
 
 ## Add a catalog
 
-Catalogs support up to **32 apps**. If upgrading from an older 24-app build, reinstall the current Store SD archive before loading a larger catalog.
+Catalogs have **no fixed app-count limit**. Thumbnail images load on demand into a small cache. Install the current Store build before loading a catalog that exceeds an older build's limit.
 
 The list is empty on first launch. Press **−**, select **Catalog URL**, and paste the raw URL of `catalog.tsv`.
 

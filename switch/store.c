@@ -3,6 +3,7 @@
 #include "installed-artwork.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +42,6 @@ static bool hash_close(Hash *hash, uint8_t *digest) {
 static const char signature[] = "IZSTORE1";
 enum { BLOCK_SIZE = 128 * 1024 };
 enum { ICON_BYTES = STORE_ICON_SIZE * STORE_ICON_SIZE * 4, ICON_ID_BYTES = 48 };
-static const char artwork_signature[] = "IZART1\n";
 typedef enum { ABSENT, REGULAR, OTHER } FileState;
 
 #ifdef IZ_STORE_STANDALONE
@@ -239,6 +239,40 @@ static bool parse(FILE *file, App *apps, unsigned limit, unsigned *count, bool r
         (!receipt || (apps[0].package.owned & 1u));
 }
 
+void store_clear(Store *store) {
+    free(store->apps); store->apps = NULL; store->count = store->remote_count = 0;
+}
+
+bool store_clone(Store *target, const Store *source) {
+    if (target == source) return true;
+    App *copy = source->count ? malloc((size_t)source->count * sizeof *copy) : NULL;
+    if (source->count && !copy) return false;
+    if (source->count) memcpy(copy, source->apps, (size_t)source->count * sizeof *copy);
+    store_clear(target); *target = *source; target->apps = copy;
+    return true;
+}
+
+/* Count validated record boundaries before allocating. No app-count ceiling. */
+static bool parse_list(FILE *file, App **apps, unsigned *count) {
+    long start = ftell(file);
+    char line[768]; size_t capacity = 0;
+    if (start < 0) return false;
+    while (fgets(line, sizeof line, file)) {
+        if (!trim_line(line)) return false;
+        if (!strncmp(line, "app\t", 4)) {
+            if (capacity == UINT_MAX || capacity >= SIZE_MAX / sizeof(App)) return false;
+            ++capacity;
+        }
+    }
+    if (ferror(file) || !capacity || fseek(file, start, SEEK_SET)) return false;
+    App *next = calloc(capacity, sizeof *next);
+    if (!next) return false;
+    unsigned parsed = 0;
+    if (!parse(file, next, (unsigned)capacity, &parsed, false)) { free(next); return false; }
+    free(*apps); *apps = next; *count = parsed;
+    return true;
+}
+
 static bool load_local_list(Store *store, const char *source, char out[STORE_MESSAGE]) {
     store->count = 0;
     store->remote_count = 0;
@@ -246,7 +280,7 @@ static bool load_local_list(Store *store, const char *source, char out[STORE_MES
     if (state == ABSENT) return true;
     FILE *file = state == REGULAR ? fopen(source, "rb") : NULL;
     if (!file) return message(out, "The local catalog could not be read.");
-    bool ok = parse(file, store->apps, STORE_MAX_APPS, &store->count, false);
+    bool ok = parse_list(file, &store->apps, &store->count);
     fclose(file);
     if (ok) return true;
     store->count = 0;
@@ -701,33 +735,15 @@ bool store_settings_write(const char *root, const StoreSettings *settings, char 
 static bool read_remote(FILE *file, const char *url, Store *store) {
     char line[768];
     if (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url)) return false;
-    App *remote = calloc(STORE_MAX_APPS, sizeof *remote);
-    if (!remote) return false;
-    int slots[STORE_MAX_APPS];
-    unsigned count, next = store->count;
-    bool ok = parse(file, remote, STORE_MAX_APPS, &count, false);
-    for (unsigned i = 0; ok && i < count; ++i) {
-        const Package *app = &remote[i].package;
-        if (!app->release_url[0]) { ok = false; break; }
-        unsigned slot = 0;
-        while (slot < store->count && strcmp(store->apps[slot].package.id, app->id)) ++slot;
-        if (slot == store->count) slot = next++;
-        else if (!store->apps[slot].package.release_url[0]) { ok = false; break; }
-        if (slot >= STORE_MAX_APPS) { ok = false; break; }
-        slots[i] = (int)slot;
+    App *remote = NULL;
+    unsigned count = 0;
+    if (!parse_list(file, &remote, &count)) return false;
+    for (unsigned i = 0; i < count; ++i) {
+        if (!remote[i].package.release_url[0]) { free(remote); return false; }
     }
-    if (ok) {
-        for (unsigned i = 0; i < count; ++i) {
-            if (!remote[i].package.repository[0] && (unsigned)slots[i] < store->count)
-                strcpy(remote[i].package.repository, store->apps[slots[i]].package.repository);
-            store->apps[slots[i]] = remote[i];
-            store->apps[slots[i]].icon = slots[i];
-        }
-        store->count = next;
-        store->remote_count = count;
-    }
-    free(remote);
-    return ok;
+    free(store->apps); store->apps = remote;
+    store->count = store->remote_count = count;
+    return true;
 }
 
 static bool load_cached_list(Store *store, const StoreSettings *settings) {
@@ -745,55 +761,65 @@ static bool catalog_sink(void *context, const void *bytes, size_t count) {
     return fwrite(bytes, 1, count, context) == count;
 }
 
-static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
-                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted) {
-    char line[768], magic[sizeof artwork_signature - 1];
+/* IZART1 keeps its byte count; IZART2 uses a little-endian 32-bit count. */
+static unsigned read_artwork(FILE *file, const Store *store, const char *url,
+                             unsigned wanted, uint32_t *pixels) {
+    char line[768], magic[7];
     if (url && (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url))) return 0;
-    if (fread(magic, 1, sizeof magic, file) != sizeof magic ||
-        memcmp(magic, artwork_signature, sizeof magic)) return 0;
-    int count = fgetc(file);
-    if (count < 1 || count > STORE_MAX_APPS) return 0;
-    struct stat info;
-    long start = ftell(file);
-    if (start < 0 || fstat(fileno(file), &info) ||
-        info.st_size != start + count * (ICON_ID_BYTES + ICON_BYTES)) return 0;
-    uint32_t slots = 0;
-    for (int item = 0; item < count; ++item) {
+    if (fread(magic, 1, sizeof magic, file) != sizeof magic) return 0;
+    uint32_t count;
+    if (!memcmp(magic, "IZART1\n", 7)) {
+        int value = fgetc(file); if (value < 1) return 0; count = (unsigned)value;
+    } else if (!memcmp(magic, "IZART2\n", 7)) {
+        unsigned char bytes[4];
+        if (fread(bytes, 1, 4, file) != 4) return 0;
+        count = read_word(bytes); if (!count) return 0;
+    } else return 0;
+    struct stat info; long start = ftell(file);
+    uint64_t bytes = (uint64_t)count * (ICON_ID_BYTES + ICON_BYTES);
+    if (start < 0 || fstat(fileno(file), &info) || info.st_size < start ||
+        (uint64_t)(info.st_size - start) != bytes) return 0;
+    unsigned char *seen = store->count ? calloc(store->count, 1) : NULL;
+    if (store->count && !seen) return 0;
+    unsigned found = 0; bool ok = true;
+    for (uint32_t item = 0; ok && item < count; ++item) {
         char id[ICON_ID_BYTES];
-        if (fread(id, 1, sizeof id, file) != sizeof id ||
-            !memchr(id, 0, sizeof id) || !identifier(id)) return 0;
+        if (fread(id, 1, sizeof id, file) != sizeof id || !memchr(id, 0, sizeof id) || !identifier(id)) { ok = false; break; }
         unsigned slot = 0;
         while (slot < store->count && strcmp(store->apps[slot].package.id, id)) ++slot;
-        if (slot == store->count) {
-            if (fseek(file, ICON_BYTES, SEEK_CUR)) return 0;
-            continue;
+        if (slot < store->count) {
+            if (seen[slot]) { ok = false; break; }
+            seen[slot] = 1;
+            if (wanted == UINT_MAX || wanted == slot) ++found;
         }
-        if (slots & (1u << slot)) return 0;
-        if (pixels && (wanted & (1u << slot))) {
-            if (fread(pixels[slot], 1, ICON_BYTES, file) != ICON_BYTES) return 0;
-        } else if (fseek(file, ICON_BYTES, SEEK_CUR)) return 0;
-        slots |= 1u << slot;
+        if (pixels && wanted == slot && slot < store->count) {
+            if (fread(pixels, 1, ICON_BYTES, file) != ICON_BYTES) ok = false;
+        } else if (fseek(file, ICON_BYTES, SEEK_CUR)) ok = false;
     }
-    return slots & wanted;
+    free(seen); return ok ? found : 0;
 }
 
-uint32_t store_read_artwork_slots(const Store *store, const StoreSettings *settings,
-                                  uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted) {
+static unsigned artwork_file(const Store *store, const StoreSettings *settings,
+                              unsigned wanted, uint32_t *pixels) {
     char name[STORE_PATH];
     if (settings->online && (!store->remote_count || !settings->url[0] ||
         !path(name, "%s" STORE_DIR "/remote-artwork.bin", store->root))) return 0;
-    if (!settings->online &&
-        !path(name, "%s%s/artwork.bin", store->root, local_catalog_dir(store))) return 0;
-    FILE *file = control_read(name);
-    if (!file) return 0;
-    uint32_t slots = read_artwork(file, store, settings->online ? settings->url : NULL, pixels, wanted);
-    fclose(file);
-    return slots;
+    if (!settings->online && !path(name, "%s%s/artwork.bin", store->root, local_catalog_dir(store))) return 0;
+    FILE *file = control_read(name); if (!file) return 0;
+    unsigned count = read_artwork(file, store, settings->online ? settings->url : NULL, wanted, pixels);
+    fclose(file); return count;
 }
 
-uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
+bool store_read_artwork_icon(const Store *store, const StoreSettings *settings, unsigned slot, uint32_t *pixels) {
+    return slot < store->count && artwork_file(store, settings, slot, pixels) != 0;
+}
+
+unsigned store_read_artwork(const Store *store, const StoreSettings *settings,
                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
-    return store_read_artwork_slots(store, settings, pixels, UINT32_MAX);
+    if (!pixels) return artwork_file(store, settings, UINT_MAX, NULL);
+    unsigned count = 0;
+    for (unsigned i = 0; i < store->count; ++i) count += store_read_artwork_icon(store, settings, i, pixels[i]);
+    return count;
 }
 
 unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings) {
@@ -812,21 +838,19 @@ unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings) 
     if (!file) return 0;
     char error[DOWNLOAD_MESSAGE];
     bool ok = fprintf(file, "%s\n", settings->url) > 0 &&
-        catalog_download(url, sizeof artwork_signature + STORE_MAX_APPS * (ICON_ID_BYTES + ICON_BYTES),
+        catalog_download(url, UINT64_MAX,
                          catalog_sink, file, error) && flush(file);
     if (fclose(file)) ok = false;
     uint32_t slots = 0;
     if (ok && (file = fopen(stage, "rb")) != NULL) {
-        slots = read_artwork(file, store, settings->url, NULL, UINT32_MAX);
+        slots = read_artwork(file, store, settings->url, UINT_MAX, NULL);
         fclose(file);
     }
     if (!slots || !control_publish(stage, name, directory)) {
         unlink(stage);
         return 0;
     }
-    unsigned count = 0;
-    for (; slots; slots &= slots - 1) ++count;
-    return count;
+    return slots;
 }
 
 bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STORE_MESSAGE]) {
@@ -841,7 +865,7 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
     FILE *file = open_new(stage);
     if (!file) return message(out, "Could not open a temporary catalog on SD.");
     bool ok = fprintf(file, "%s\n", settings->url) > 0;
-    if (ok) ok = catalog_download(settings->url, 48u * 1024u, catalog_sink, file, out);
+    if (ok) ok = catalog_download(settings->url, UINT64_MAX, catalog_sink, file, out);
     else message(out, "Could not write the catalog on SD.");
     if (ok && !flush(file)) ok = message(out, "Could not save the catalog on SD.");
     if (fclose(file) && ok) ok = message(out, "Could not close the temporary catalog on SD.");
@@ -851,7 +875,7 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
         store->remote_count = 0;
         ok = file && read_remote(file, settings->url, store);
         if (file) fclose(file);
-        if (!ok) message(out, "Invalid list or more than 32 apps.");
+        if (!ok) message(out, "Invalid list or not enough memory.");
     }
     if (ok && !control_publish(stage, name, directory)) ok = message(out, "Could not publish the catalog on SD.");
     if (!ok) { unlink(stage); return false; }

@@ -4,7 +4,7 @@ import sys
 
 romfs, destination = map(Path, sys.argv[1:])
 icons = sorted((romfs / 'icons').glob('*.rgba'))
-assert len(icons) <= 32
+assert len(icons) <= 255
 with destination.open('wb') as out:
     out.write(b'IZSTOREA' + bytes([len(icons), 0, 0, 0]))
     out.write((romfs / 'font.bin').read_bytes())
