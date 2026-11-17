@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include "download.h"
 
-#define STORE_MAX_APPS 24
+#define STORE_MAX_APPS 32
+_Static_assert(STORE_MAX_APPS <= 32, "Artwork masks use 32 bits");
 #define STORE_MAX_FILES 17
 #define STORE_PATH 512
 #define STORE_MESSAGE 160

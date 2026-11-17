@@ -213,7 +213,7 @@ typedef struct {
 
 static void reset_artwork(Session *session, const Store *store) {
     memset(artwork.loaded, 0, sizeof artwork.loaded);
-    session->artwork_pending = (1u << store->count) - 1u;
+    session->artwork_pending = store->count == 32 ? UINT32_MAX : (1u << store->count) - 1u;
 }
 
 static bool embedded_icon(const Session *session, const App *app, uint32_t *pixels) {

@@ -851,7 +851,7 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
         store->remote_count = 0;
         ok = file && read_remote(file, settings->url, store);
         if (file) fclose(file);
-        if (!ok) message(out, "Invalid list or more than 24 apps.");
+        if (!ok) message(out, "Invalid list or more than 32 apps.");
     }
     if (ok && !control_publish(stage, name, directory)) ok = message(out, "Could not publish the catalog on SD.");
     if (!ok) { unlink(stage); return false; }

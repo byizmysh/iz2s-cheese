@@ -29,6 +29,8 @@ Extract [`iz2s-store-nro-sd.zip`](https://github.com/byizmysh/iz2s-store/release
 
 ## Add a catalog
 
+Catalogs support up to **32 apps**. If upgrading from an older 24-app build, reinstall the current Store SD archive before loading a larger catalog.
+
 The list is empty on first launch. Press **−**, select **Catalog URL**, and paste the raw URL of `catalog.tsv`.
 
 The Store looks for `artwork.bin` alongside `catalog.tsv`. It saves the list and thumbnails to the card for offline browsing. Use **Settings → Download catalog** to refresh both files. IZ2S can download IZA and NRO apps from the same catalog. On kaiHEN, IZA entries are marked as requiring IZ2S.
