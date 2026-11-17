@@ -206,34 +206,59 @@ typedef struct {
     bool touched, check_on_start, dirty;
     const unsigned char *art_records;
     unsigned art_count;
+    uint32_t artwork_pending;
     uint64_t held;
 } Session;
 
-static void sync_artwork(Session *session, Store *store) {
-    uint32_t online = store_read_artwork(store, &session->view.settings, artwork.icons);
-    for (unsigned i = 0; i < STORE_MAX_APPS; ++i)
-        artwork.loaded[i] = (online & (1u << i)) != 0;
-    if (session->art_records) {
-        const size_t record_size = 48 + sizeof artwork.icons[0];
-        for (unsigned i = 0; i < store->count; ++i) {
-            if (artwork.loaded[i]) continue;
-            for (unsigned j = 0; j < session->art_count; ++j) {
-                const unsigned char *record = session->art_records + record_size * j;
-                if (strncmp((const char *)record, store->apps[i].package.id, 48)) continue;
-                memcpy(artwork.icons[i], record + 48, sizeof artwork.icons[i]);
-                artwork.loaded[i] = true;
-                break;
-            }
-        }
+static void reset_artwork(Session *session, const Store *store) {
+    memset(artwork.loaded, 0, sizeof artwork.loaded);
+    session->artwork_pending = (1u << store->count) - 1u;
+}
+
+static bool embedded_icon(const Session *session, const App *app, uint32_t *pixels) {
+    const size_t record_size = 48 + sizeof artwork.icons[0];
+    for (unsigned i = 0; i < session->art_count; ++i) {
+        const unsigned char *record = session->art_records + record_size * i;
+        if (strncmp((const char *)record, app->package.id, 48)) continue;
+        memcpy(pixels, record + 48, sizeof artwork.icons[0]);
+        return true;
     }
+    return false;
+}
+
+static void load_artwork(Session *session, const Store *store) {
+    if (!session->artwork_pending || (session->view.busy && !session->view.minimized)) return;
+
+    const View *view = &session->view;
+    unsigned first = view->cursor / STORE_PAGE_SIZE * STORE_PAGE_SIZE;
+    uint32_t visible = 0;
+    if (view->screen == CATALOG) {
+        for (unsigned i = first; i < view->count && i < first + STORE_PAGE_SIZE; ++i)
+            visible |= 1u << view->visible[i];
+    } else if (view->screen == DETAILS && view->count) {
+        visible = 1u << view->visible[view->cursor];
+    }
+
+    uint32_t wanted = session->artwork_pending & visible;
+    // Fill the visible page before drawing it. Use one slot per idle frame to warm the rest.
+    if (!wanted && !session->dirty && !view->busy)
+        wanted = session->artwork_pending & (0u - session->artwork_pending);
+    if (!wanted) return;
+
+    uint32_t loaded = store_read_artwork_slots(store, &view->settings, artwork.icons, wanted);
     char folder[STORE_PATH];
     int length = snprintf(folder, sizeof folder, "%s" STORE_DIR, store->root);
-    if (length >= 0 && (size_t)length < sizeof folder) artwork_update(&artwork, folder, store);
     for (unsigned i = 0; i < store->count; ++i) {
-        if (!artwork.loaded[i])
-            artwork.loaded[i] = store_read_installed_icon(store, &store->apps[i], artwork.icons[i]);
-        if (artwork.loaded[i]) store_sync_icon_pixels(store, &store->apps[i], artwork.icons[i]);
+        uint32_t bit = 1u << i;
+        if (!(wanted & bit)) continue;
+        const App *app = &store->apps[i];
+        artwork.loaded[i] = (loaded & bit) || embedded_icon(session, app, artwork.icons[i]) ||
+            (length >= 0 && (size_t)length < sizeof folder && artwork_read_icon(folder, app, artwork.icons[i])) ||
+            store_read_installed_icon(store, app, artwork.icons[i]);
+        if (artwork.loaded[i] && !view->busy) store_sync_icon_pixels(store, app, artwork.icons[i]);
+        if (artwork.loaded[i] && (visible & bit)) session->dirty = true;
     }
+    session->artwork_pending &= ~wanted;
 }
 
 static void open_session(Session *session, bool hosted) {
@@ -258,7 +283,9 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
         bool changed = app_action || task->command == REFRESH || (task->ok && task->command != CHECK_NETWORK);
         if (changed) session->active ^= 1u;
         store = &catalogs[session->active];
-        if (changed) sync_artwork(session, store);
+        if (changed && !app_action) reset_artwork(session, store);
+        if (app_action)
+            session->artwork_pending |= 1u << (unsigned)(task->app - task->current->apps);
         view->busy = false;
         view->failure = !task->ok && !atomic_load(&task->cancel);
         view->cancellable = false;
@@ -321,6 +348,7 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
         start_task(task, &session->thread, view, store, &catalogs[session->active ^ 1u], command);
     if (pressed || (touching && !session->touched) || command != NO_JOB) session->dirty = true;
     session->touched = touching;
+    load_artwork(session, store);
     return true;
 }
 

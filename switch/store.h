@@ -65,6 +65,8 @@ bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *
 void store_settings_read(const char *root, StoreSettings *settings);
 bool store_settings_write(const char *root, const StoreSettings *settings, char message[STORE_MESSAGE]);
 bool store_fetch_list(Store *store, const StoreSettings *settings, char message[STORE_MESSAGE]);
+uint32_t store_read_artwork_slots(const Store *store, const StoreSettings *settings,
+                                  uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted);
 unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings);
 uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]);

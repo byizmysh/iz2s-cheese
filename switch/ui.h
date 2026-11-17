@@ -6,6 +6,7 @@
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 #define ART_SIZE STORE_ICON_SIZE
+#define STORE_PAGE_SIZE 5
 #define BRAND_SIZE 44
 #define FONT_CELL_WIDTH 40
 #define FONT_CELL_HEIGHT 44
@@ -50,6 +51,7 @@ typedef struct {
 } View;
 
 bool artwork_open(Artwork *art, const char *folder);
+bool artwork_read_icon(const char *folder, const App *app, uint32_t *pixels);
 void artwork_update(Artwork *art, const char *folder, const Store *store);
 void view_filter(View *view, const Store *store);
 Command view_input(View *view, const Store *store, unsigned buttons);

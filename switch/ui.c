@@ -5,7 +5,7 @@
 
 enum { FILTER_ALL, FILTER_INSTALLED, FILTER_UPDATES, FILTER_TOOLS,
     FILTER_MEDIA, FILTER_EMULATORS, FILTER_GAMES, FILTERS };
-enum { PAGE_SIZE = 5, CARD_X = 272, CARD_Y = 142, CARD_H = 302, CARD_GAP = 14 };
+enum { PAGE_SIZE = STORE_PAGE_SIZE, CARD_X = 272, CARD_Y = 142, CARD_H = 302, CARD_GAP = 14 };
 enum { PAGE_Y = 585, PAGE_PREV_X = 1024, PAGE_NEXT_X = 1182, PAGE_BUTTON_W = 52, PAGE_BUTTON_H = 42 };
 enum { SMALL, NORMAL, MEDIUM, LARGE };
 
@@ -763,14 +763,21 @@ bool artwork_open(Artwork *art, const char *folder) {
     return ok;
 }
 
+bool artwork_read_icon(const char *folder, const App *app, uint32_t *pixels) {
+    char path[STORE_PATH];
+    int length = snprintf(path, sizeof path, "%s/icons/%s.rgba", folder, app->package.id);
+    if (length < 0 || (size_t)length >= sizeof path) return false;
+    FILE *file = fopen(path, "rb");
+    if (!file) return false;
+    bool ok = fread(pixels, sizeof *pixels, ART_SIZE * ART_SIZE, file) == ART_SIZE * ART_SIZE &&
+        fgetc(file) == EOF && !ferror(file);
+    fclose(file);
+    return ok;
+}
+
 void artwork_update(Artwork *art, const char *folder, const Store *store) {
     for (unsigned i = 0; i < store->count; ++i) {
-        if (art->loaded[i]) continue;
-        char path[STORE_PATH];
-        if (snprintf(path,sizeof path,"%s/icons/%s.rgba",folder,store->apps[i].package.id) >= (int)sizeof path) continue;
-        FILE *file = fopen(path,"rb");
-        if (!file) continue;
-        art->loaded[i] = fread(art->icons[i],sizeof art->icons[i],1,file) == 1 && fgetc(file) == EOF && !ferror(file);
-        fclose(file);
+        if (!art->loaded[i])
+            art->loaded[i] = artwork_read_icon(folder, &store->apps[i], art->icons[i]);
     }
 }

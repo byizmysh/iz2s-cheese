@@ -684,7 +684,7 @@ static bool catalog_sink(void *context, const void *bytes, size_t count) {
 }
 
 static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
-                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
+                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted) {
     char line[768], magic[sizeof artwork_signature - 1];
     if (url && (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url))) return 0;
     if (fread(magic, 1, sizeof magic, file) != sizeof magic ||
@@ -707,15 +707,16 @@ static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
             continue;
         }
         if (slots & (1u << slot)) return 0;
-        if (pixels ? fread(pixels[slot], 1, ICON_BYTES, file) != ICON_BYTES :
-                     fseek(file, ICON_BYTES, SEEK_CUR) != 0) return 0;
+        if (pixels && (wanted & (1u << slot))) {
+            if (fread(pixels[slot], 1, ICON_BYTES, file) != ICON_BYTES) return 0;
+        } else if (fseek(file, ICON_BYTES, SEEK_CUR)) return 0;
         slots |= 1u << slot;
     }
-    return slots;
+    return slots & wanted;
 }
 
-uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
-                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
+uint32_t store_read_artwork_slots(const Store *store, const StoreSettings *settings,
+                                  uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE], uint32_t wanted) {
     char name[STORE_PATH];
     if (settings->online && (!store->remote_count || !settings->url[0] ||
         !path(name, "%s" STORE_DIR "/remote-artwork.bin", store->root))) return 0;
@@ -723,9 +724,14 @@ uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
         !path(name, "%s%s/artwork.bin", store->root, local_catalog_dir(store))) return 0;
     FILE *file = control_read(name);
     if (!file) return 0;
-    uint32_t slots = read_artwork(file, store, settings->online ? settings->url : NULL, pixels);
+    uint32_t slots = read_artwork(file, store, settings->online ? settings->url : NULL, pixels, wanted);
     fclose(file);
     return slots;
+}
+
+uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
+                            uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
+    return store_read_artwork_slots(store, settings, pixels, UINT32_MAX);
 }
 
 unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings) {
@@ -749,7 +755,7 @@ unsigned store_fetch_artwork(const Store *store, const StoreSettings *settings) 
     if (fclose(file)) ok = false;
     uint32_t slots = 0;
     if (ok && (file = fopen(stage, "rb")) != NULL) {
-        slots = read_artwork(file, store, settings->url, NULL);
+        slots = read_artwork(file, store, settings->url, NULL, UINT32_MAX);
         fclose(file);
     }
     if (!slots || !control_publish(stage, name, directory)) {

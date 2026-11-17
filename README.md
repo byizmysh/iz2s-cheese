@@ -11,8 +11,8 @@ A homebrew store for Nintendo Switch 2.
 
 | Console environment | Archive | Supported apps |
 | --- | --- | --- |
-| [IZ2S](https://github.com/byizmysh/IZ2S-Platform) | `iz2s-store-iza-sd.zip` | **.iza** and **.nro** |
-| [kaiHEN](https://github.com/ouncebrew/kaihen) | `iz2s-store-nro-sd.zip` | **.nro** |
+| [IZ2S](https://github.com/byizmysh/IZ2S-Platform) | [`iz2s-store-iza-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-iza-sd.zip) | **.iza** and **.nro** |
+| [kaiHEN](https://github.com/ouncebrew/kaihen) | [`iz2s-store-nro-sd.zip`](https://github.com/byizmysh/iz2s-store/releases/latest/download/iz2s-store-nro-sd.zip) | **.nro** |
 
 ## Install on IZ2S
 
@@ -39,4 +39,4 @@ For a local catalog, place `catalog.tsv` and `artwork.bin` in `/iz2s/modules/iz2
 
 Create a separate public GitHub repository. Put `catalog.tsv` and `artwork.bin` at the root of the `main` branch. Open `catalog.tsv`, click **Raw**, and copy the URL into IZ2S Store.
 
-See the [catalog format](https://github.com/byizmysh/iz2s-store-catalog#catalog-format) to list IZA releases and their companion files.
+See the [catalog format](docs/catalog-format.md) to list IZA releases and their companion files.
