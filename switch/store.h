@@ -13,6 +13,11 @@
 #define STORE_ICON_SIZE 96
 #define STORE_DIR "/iz2s/iz2s-store"
 #define MODULE_DIR "/iz2s/modules"
+#ifdef IZ_STORE_STANDALONE
+#define STORE_CATALOG_DIR "/switch/iz2s-store/catalog"
+#else
+#define STORE_CATALOG_DIR MODULE_DIR "/iz2s-store/catalog"
+#endif
 
 void store_migrate(const char *root);
 
@@ -49,7 +54,7 @@ typedef struct {
     App apps[STORE_MAX_APPS];
 } Store;
 
-typedef struct { char url[RELEASE_URL_MAX]; } StoreSettings;
+typedef struct { char url[RELEASE_URL_MAX]; bool online; } StoreSettings;
 
 typedef void (*StoreProgress)(void *, uint64_t done, uint64_t total);
 typedef struct { StoreProgress report; void *context; const atomic_bool *cancel; } Progress;
@@ -66,6 +71,7 @@ uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
 void store_refresh(const Store *store, App *app);
 void store_sync_icon(const Store *store, const App *app, const char *artwork);
 void store_sync_icon_pixels(const Store *store, const App *app, const void *rgba);
+bool store_read_installed_icon(const Store *store, const App *app, uint32_t *pixels);
 bool store_install(const Store *store, const App *app, Progress progress, char message[STORE_MESSAGE]);
 bool store_remove(const Store *store, const App *app, char message[STORE_MESSAGE]);
 const char *store_extension(PackageKind kind);

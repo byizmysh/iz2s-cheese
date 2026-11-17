@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "store.h"
+#include "installed-artwork.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -203,7 +204,7 @@ static bool trim_line(char line[768]) {
     return true;
 }
 
-static bool load_cached_list(Store *store);
+static bool load_cached_list(Store *store, const StoreSettings *settings);
 
 static bool parse(FILE *file, App *apps, unsigned limit, unsigned *count, bool receipt) {
     char line[768];
@@ -253,15 +254,26 @@ static bool load_local_list(Store *store, const char *source, char out[STORE_MES
     return message(out, "The local catalog is damaged or unsupported.");
 }
 
+static const char *local_catalog_dir(const Store *store) {
+    char name[STORE_PATH];
+    if (path(name, "%s" STORE_CATALOG_DIR "/catalog.tsv", store->root) && file_state(name) != ABSENT)
+        return STORE_CATALOG_DIR;
+    return STORE_DIR;
+}
+
 bool store_load(Store *store, const char *root, char out[STORE_MESSAGE]) {
     store->count = 0;
     store->remote_count = 0;
     if (!path(store->root, "%s", root) || strlen(root) + 256 >= STORE_PATH)
         return message(out, "SD path is too long.");
-    char source[STORE_PATH];
-    path(source, "%s" STORE_DIR "/catalog.tsv", root);
-    if (!load_local_list(store, source, out)) return false;
-    load_cached_list(store);
+    StoreSettings settings;
+    store_settings_read(root, &settings);
+    if (settings.online) load_cached_list(store, &settings);
+    else {
+        char source[STORE_PATH];
+        if (!path(source, "%s%s/catalog.tsv", root, local_catalog_dir(store)) ||
+            !load_local_list(store, source, out)) return false;
+    }
     out[0] = '\0';
     return true;
 }
@@ -458,6 +470,33 @@ static FILE *control_read(const char *name) {
     return NULL;
 }
 
+bool store_read_installed_icon(const Store *store, const App *app, uint32_t *pixels) {
+    if (app->state != INSTALLED && app->state != UPDATE_AVAILABLE && app->state != EXTERNAL)
+        return false;
+    char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], sidecar[STORE_PATH];
+    module_paths(store, &app->package, directory, active, backup);
+    if (path(sidecar, "%s/.izstore-icon.rgba", directory)) {
+        FILE *file = control_read(sidecar);
+        if (file) {
+            bool ok = fread(pixels, 1, ICON_BYTES, file) == ICON_BYTES && fgetc(file) == EOF && !ferror(file);
+            fclose(file);
+            if (ok) return true;
+        }
+    }
+#ifdef IZ_STORE_STANDALONE
+    if (file_state(active) == ABSENT &&
+        !path(active, "%s" INSTALL_DIR "/%s.nro", store->root, app->package.id)) return false;
+#endif
+    if (file_state(active) != REGULAR) return false;
+    FILE *file = fopen(active, "rb");
+    if (!file) return false;
+    struct stat info;
+    bool ok = !fstat(fileno(file), &info) && info.st_size > 0 &&
+        installed_artwork(file, (uint64_t)info.st_size, app->package.kind == PACKAGE_IZM, pixels);
+    fclose(file);
+    return ok;
+}
+
 static bool control_publish(const char *stage, const char *final, const char *directory) {
     char backup[STORE_PATH];
     if (!path(backup, "%s.bak", final) || file_state(backup) == OTHER || file_state(final) == OTHER)
@@ -481,7 +520,7 @@ void store_sync_icon_pixels(const Store *store, const App *app, const void *rgba
     (void)app;
     (void)rgba;
 #else
-    if (app->state != INSTALLED || app->package.kind == PACKAGE_IZM) return;
+    if ((app->state != INSTALLED && app->state != UPDATE_AVAILABLE) || app->package.kind == PACKAGE_IZM) return;
     const unsigned char *pixels = rgba;
     char directory[STORE_PATH], active[STORE_PATH], backup[STORE_PATH], to[STORE_PATH], stage[STORE_PATH];
     module_paths(store, &app->package, directory, active, backup);
@@ -524,13 +563,19 @@ void store_sync_icon(const Store *store, const App *app, const char *artwork) {
 }
 
 void store_settings_read(const char *root, StoreSettings *settings) {
-    settings->url[0] = '\0';
+    *settings = (StoreSettings){0};
     char name[STORE_PATH], line[768];
     if (!path(name, "%s" STORE_DIR "/settings.txt", root)) return;
     FILE *file = control_read(name);
     if (!file) return;
-    if (fgets(line, sizeof line, file) && trim_line(line) && (!*line || catalog_url(line)))
+    if (fgets(line, sizeof line, file) && trim_line(line) && (!*line || catalog_url(line))) {
         strcpy(settings->url, line);
+        settings->online = settings->url[0] != '\0';
+        if (fgets(line, sizeof line, file) && trim_line(line)) {
+            if (!strcmp(line, "sd")) settings->online = false;
+            else if (!strcmp(line, "online")) settings->online = true;
+        }
+    }
     fclose(file);
 }
 
@@ -550,7 +595,7 @@ bool store_settings_write(const char *root, const StoreSettings *settings, char 
     if (file_state(stage) == REGULAR && unlink(stage)) return message(out, "Could not clear temporary settings.");
     FILE *file = open_new(stage);
     if (!file) return message(out, "Could not open temporary settings on SD.");
-    bool ok = fprintf(file, "%s\n", settings->url) > 0 && flush(file);
+    bool ok = fprintf(file, "%s\n%s\n", settings->url, settings->online ? "online" : "sd") > 0 && flush(file);
     if (fclose(file)) ok = false;
     if (ok && control_publish(stage, name, directory)) return true;
     unlink(stage);
@@ -589,15 +634,13 @@ static bool read_remote(FILE *file, const char *url, Store *store) {
     return ok;
 }
 
-static bool load_cached_list(Store *store) {
-    StoreSettings settings;
-    store_settings_read(store->root, &settings);
-    if (!settings.url[0]) return false;
+static bool load_cached_list(Store *store, const StoreSettings *settings) {
+    if (!settings->url[0]) return false;
     char name[STORE_PATH];
     if (!path(name, "%s" STORE_DIR "/remote.tsv", store->root)) return false;
     FILE *file = control_read(name);
     if (!file) return false;
-    bool ok = read_remote(file, settings.url, store);
+    bool ok = read_remote(file, settings->url, store);
     fclose(file);
     return ok;
 }
@@ -609,8 +652,8 @@ static bool catalog_sink(void *context, const void *bytes, size_t count) {
 static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
                              uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
     char line[768], magic[sizeof artwork_signature - 1];
-    if (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url) ||
-        fread(magic, 1, sizeof magic, file) != sizeof magic ||
+    if (url && (!fgets(line, sizeof line, file) || !trim_line(line) || strcmp(line, url))) return 0;
+    if (fread(magic, 1, sizeof magic, file) != sizeof magic ||
         memcmp(magic, artwork_signature, sizeof magic)) return 0;
     int count = fgetc(file);
     if (count < 1 || count > STORE_MAX_APPS) return 0;
@@ -640,11 +683,13 @@ static uint32_t read_artwork(FILE *file, const Store *store, const char *url,
 uint32_t store_read_artwork(const Store *store, const StoreSettings *settings,
                             uint32_t pixels[][STORE_ICON_SIZE * STORE_ICON_SIZE]) {
     char name[STORE_PATH];
-    if (!store->remote_count || !settings->url[0] ||
-        !path(name, "%s" STORE_DIR "/remote-artwork.bin", store->root)) return 0;
+    if (settings->online && (!store->remote_count || !settings->url[0] ||
+        !path(name, "%s" STORE_DIR "/remote-artwork.bin", store->root))) return 0;
+    if (!settings->online &&
+        !path(name, "%s%s/artwork.bin", store->root, local_catalog_dir(store))) return 0;
     FILE *file = control_read(name);
     if (!file) return 0;
-    uint32_t slots = read_artwork(file, store, settings->url, pixels);
+    uint32_t slots = read_artwork(file, store, settings->online ? settings->url : NULL, pixels);
     fclose(file);
     return slots;
 }
@@ -686,12 +731,9 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
     char directory[STORE_PATH], stage[STORE_PATH], name[STORE_PATH], root[STORE_PATH];
     if (!settings->url[0]) return message(out, "Enter a catalog URL first.");
     strcpy(root, store->root);
-    // Merge each download with the SD index, not a previously merged remote list.
-    char base[STORE_PATH];
-    if (!path(directory, "%s" STORE_DIR, root) || !path(base, "%s/catalog.tsv", directory) ||
+    if (!path(directory, "%s" STORE_DIR, root) ||
         !path(name, "%s/remote.tsv", directory) || !path(stage, "%s/.remote.tmp", directory))
         return message(out, "The SD path is too long.");
-    if (!load_local_list(store, base, out)) return false;
     if (!settings_folder(root, directory)) return message(out, "Could not open the catalog folder on SD.");
     if (file_state(stage) == REGULAR && unlink(stage)) return message(out, "Could not clear the temporary catalog.");
     FILE *file = open_new(stage);
@@ -703,9 +745,11 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
     if (fclose(file) && ok) ok = message(out, "Could not close the temporary catalog on SD.");
     if (ok) {
         file = fopen(stage, "rb");
+        store->count = 0;
+        store->remote_count = 0;
         ok = file && read_remote(file, settings->url, store);
         if (file) fclose(file);
-        if (!ok) message(out, "Invalid list, local ID conflict, or more than 24 apps.");
+        if (!ok) message(out, "Invalid list or more than 24 apps.");
     }
     if (ok && !control_publish(stage, name, directory)) ok = message(out, "Could not publish the catalog on SD.");
     if (!ok) { unlink(stage); return false; }
@@ -721,8 +765,12 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
 bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
                            char out[STORE_MESSAGE]) {
     if (!store_load(store, root, out)) return false;
+    if (!settings->online) {
+        if (!store->count) snprintf(out, STORE_MESSAGE, "Copy catalog.tsv and artwork.bin to the Store catalog folder.");
+        return true;
+    }
     if (!settings->url[0]) {
-        if (store->count) snprintf(out, STORE_MESSAGE, "Set Catalog URL in Settings to download thumbnails.");
+        snprintf(out, STORE_MESSAGE, "Set Catalog URL in Settings.");
         return true;
     }
     if (!store->remote_count) {

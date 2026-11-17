@@ -50,6 +50,7 @@ int main(int argc, char **argv) {
     if (!strcmp(command,"fetch-list")) {
         if (argc != 4 || strlen(argv[3]) >= sizeof view.settings.url) return 2;
         strcpy(view.settings.url, argv[3]);
+        view.settings.online = view.settings.url[0] != '\0';
         bool ok = store_settings_write(store.root, &view.settings, message) &&
                   store_fetch_list(&store, &view.settings, message);
         puts(message);
@@ -76,6 +77,22 @@ int main(int argc, char **argv) {
         }
         return 0;
     }
+    if (!strcmp(command, "installed")) {
+        view_input(&view, &store, BTN_R);
+        for (unsigned i = 0; i < view.count; ++i)
+            puts(store.apps[view.visible[i]].package.id);
+        return 0;
+    }
+    if (!strcmp(command, "icon") && argc == 4) {
+        static uint32_t pixels[STORE_ICON_SIZE * STORE_ICON_SIZE];
+        for (unsigned i = 0; i < store.count; ++i)
+            if (!strcmp(store.apps[i].package.id, argv[3]) &&
+                store_read_installed_icon(&store, &store.apps[i], pixels)) {
+                printf("%08x\n", pixels[0]);
+                return 0;
+            }
+        return 1;
+    }
     if (argc < 4) return 2;
     bool selected = !strcmp(argv[3],"-");
     if (!strcmp(command,"picture") && !strcmp(argv[3],"compact")) {
@@ -85,6 +102,10 @@ int main(int argc, char **argv) {
     if (!strcmp(command,"picture") && !strcmp(argv[3],"settings")) {
         view_input(&view, &store, BTN_MINUS);
         selected = view.screen == SETTINGS;
+    }
+    if (!strcmp(command,"picture") && !strcmp(argv[3],"about")) {
+        view_input(&view, &store, BTN_X);
+        selected = view.screen == ABOUT;
     }
     for (unsigned i = 0; i < store.count; ++i)
         if (!strcmp(store.apps[i].package.id,argv[3])) {

@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "github-mark.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -133,8 +134,11 @@ static void cover(Canvas *canvas, int x, int y, int index, int size) {
     }
     const uint32_t *pixels = canvas->art->icons[index];
     for (int row = 0; row < size; ++row)
-        for (int col = 0; col < size; ++col)
-            canvas->pixels[(y+row)*canvas->stride+x+col] = pixels[row*ART_SIZE/size*ART_SIZE + col*ART_SIZE/size];
+        for (int col = 0; col < size; ++col) {
+            uint32_t color = pixels[row*ART_SIZE/size*ART_SIZE + col*ART_SIZE/size];
+            uint32_t *target = &canvas->pixels[(y+row)*canvas->stride+x+col];
+            *target = color >> 24 == 255 ? color : blend(*target, color, color >> 24);
+        }
 }
 
 static bool check_mark(InstallState state) { return state == INSTALLED || state == UPDATE_AVAILABLE || state == EXTERNAL; }
@@ -296,7 +300,7 @@ static void detail(Canvas *canvas, const App *app, const View *view) {
     }
 }
 
-enum { SETTINGS_Y = 282, SETTINGS_STEP = 72, SETTINGS_W = 952, SETTINGS_H = 62, SETTINGS_COUNT = 3 };
+enum { SETTINGS_Y = 282, SETTINGS_STEP = 72, SETTINGS_W = 952, SETTINGS_H = 62, SETTINGS_COUNT = 4 };
 
 static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,48,800,LARGE,ink,"Settings");
@@ -305,12 +309,15 @@ static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,169,952,SMALL,muted,view->network[0] ? view->network : "Switch system connection");
     label(canvas,CARD_X,200,952,SMALL,muted,view->addresses);
     label(canvas,CARD_X,230,952,SMALL,dim,"Change Wi-Fi and DNS in HOME > System Settings > Internet.");
-    const char *titles[SETTINGS_COUNT] = {"Catalog URL", "Download catalog", "Test GitHub connection"};
+    const char *titles[SETTINGS_COUNT] = {view->settings.online ? "Catalog source: Online" : "Catalog source: SD card",
+        "Catalog URL", view->settings.online ? "Download catalog" : "Reload SD catalog", "Test GitHub connection"};
     char list_status[90];
     if (store->remote_count)
         snprintf(list_status,sizeof list_status,"%u cached entries from the configured source",store->remote_count);
-    else snprintf(list_status,sizeof list_status,"Set a catalog URL to download an app list");
+    else snprintf(list_status,sizeof list_status,"%s", view->settings.online ?
+                  "Download catalog and thumbnails" : "Reload catalog.tsv and artwork.bin");
     const char *descriptions[SETTINGS_COUNT] = {
+        view->settings.online ? "Use the configured URL and its cached files" : "sdmc:" STORE_CATALOG_DIR "/",
         view->settings.url[0] ? view->settings.url : "No URL configured",
         list_status,
         view->github[0] ? view->github : "Checks DNS, HTTPS and the GitHub release server",
@@ -337,6 +344,26 @@ static void dialog(Canvas *canvas, const App *app, const View *view) {
             uint32_t alpha = *pixel & 0xff000000u;
             *pixel = (blend(*pixel,background,177) & 0x00ffffffu) | alpha;
         }
+    if (view->screen == ABOUT) {
+        rounded(canvas,220,114,840,472,16,panel,bar);
+        label(canvas,252,140,760,LARGE,ink,"IZ2S Store");
+        label(canvas,252,200,760,NORMAL,muted,"Developer: IZMYSH");
+        const char *const links[] = {"https://github.com/byizmysh", "https://github.com/byizmysh/IZ2S-Platform"};
+        const char *const titles[] = {"Author", "Project"};
+        for (int i = 0; i < 2; ++i) {
+            int y = 261 + i * 86;
+            rounded(canvas,252,y,776,70,10,panel,bar);
+            for (int row = 0; row < 24; ++row)
+                for (int col = 0; col < 24; ++col) {
+                    uint32_t *pixel = &canvas->pixels[(y+23+row)*canvas->stride+268+col];
+                    *pixel = blend(*pixel,ink,github_mark[row][col]);
+                }
+            label(canvas,310,y+8,700,SMALL,muted,titles[i]);
+            label(canvas,310,y+30,700,NORMAL,ink,links[i]);
+        }
+        action_button(canvas,795,508,232,"B","Back",false);
+        return;
+    }
     if (view->screen == REPOSITORY && app && (!view->busy || view->minimized)) {
         char url[RELEASE_URL_MAX], host[64];
         store_repository(&app->package,url);
@@ -503,6 +530,7 @@ void view_draw(uint32_t *pixels, unsigned stride, const Artwork *art, const Stor
     if (view->screen == CATALOG) {
         footer_key(&canvas,27,"L / R","Categories",false);
         footer_key(&canvas,264,"ZL","Sidebar",false);
+        if (!view->busy) footer_key(&canvas,420,"X","About",false);
         footer_key(&canvas,570,"Y",view->busy?"Download":"Refresh",false);
         footer_key(&canvas,773,"A","Details",true);
         footer_key(&canvas,916,"-","Settings",false);
@@ -520,7 +548,7 @@ void view_draw(uint32_t *pixels, unsigned stride, const Artwork *art, const Stor
         }
         footer_key(&canvas,1071,"B","Back",false);
     }
-    if (view->screen == REPOSITORY || view->screen == CATALOG_INFO || view->screen == SETTINGS_RESULT ||
+    if (view->screen == ABOUT || view->screen == REPOSITORY || view->screen == CATALOG_INFO || view->screen == SETTINGS_RESULT ||
         (view->busy && !view->minimized) || (app && (view->screen == CONFIRM_REMOVE || view->screen == CONFIRM_COMPATIBILITY)))
         dialog(&canvas,app,view);
 }
@@ -542,15 +570,17 @@ void view_filter(View *view, const Store *store) {
     for (unsigned i = 0; i < store->count; ++i)
         if (selected_filter(view->filter, &store->apps[i])) view->visible[view->count++] = i;
     if (view->cursor >= view->count) view->cursor = view->count ? view->count-1 : 0;
-    if (!view->count && !settings_screen(view->screen)) view->screen = CATALOG;
+    if (!view->count && !settings_screen(view->screen) && view->screen != ABOUT) view->screen = CATALOG;
 }
 
 static Command settings_action(View *view) {
-    if (view->settings_row == 1) {
+    if (view->settings_row == 0) return TOGGLE_CATALOG_SOURCE;
+    if (view->settings_row == 2) {
+        if (!view->settings.online) { view->screen = CATALOG; return REFRESH; }
         view->screen = CATALOG_INFO;
         return NO_JOB;
     }
-    return view->settings_row == 0 ? EDIT_URL : CHECK_NETWORK;
+    return view->settings_row == 1 ? EDIT_URL : CHECK_NETWORK;
 }
 
 Command view_input(View *view, const Store *store, unsigned buttons) {
@@ -567,6 +597,10 @@ Command view_input(View *view, const Store *store, unsigned buttons) {
         if (view->screen == DETAILS || view->screen == SETTINGS) buttons &= ~BTN_A;
     }
     if (!buttons) return NO_JOB;
+    if (view->screen == ABOUT) {
+        if (buttons & (BTN_B | BTN_X | BTN_PLUS)) view->screen = CATALOG;
+        return NO_JOB;
+    }
     if (view->screen == REPOSITORY) {
         if (buttons & (BTN_B | BTN_R | BTN_PLUS)) view->screen = DETAILS;
         return NO_JOB;
@@ -611,6 +645,7 @@ Command view_input(View *view, const Store *store, unsigned buttons) {
     }
     if (buttons & BTN_B) return EXIT;
     if (buttons & BTN_MINUS) { view->screen = SETTINGS; return NO_JOB; }
+    if (buttons & BTN_X) { view->screen = ABOUT; return NO_JOB; }
     if (buttons & BTN_Y) return REFRESH;
     if (buttons & (BTN_L | BTN_R)) {
         view->filter = (view->filter + (buttons & BTN_R ? 1 : FILTERS-1)) % FILTERS;
@@ -647,6 +682,10 @@ Command view_touch(View *view, const Store *store, int x, int y) {
         if (hit(x,y,920,549,225,46)) return view_input(view,store,BTN_B);
         return NO_JOB;
     }
+    if (view->screen == ABOUT) {
+        if (hit(x,y,795,508,232,46) || hit(x,y,1062,654,218,66)) return view_input(view,store,BTN_B);
+        return NO_JOB;
+    }
     if (view->screen == CATALOG_INFO) {
         if (hit(x,y,660,549,235,46)) return view_input(view,store,BTN_A);
         if (hit(x,y,920,549,225,46)) return view_input(view,store,BTN_B);
@@ -676,7 +715,8 @@ Command view_touch(View *view, const Store *store, int x, int y) {
         return NO_JOB;
     }
     if (hit(x,y,901,654,156,66)) return view_input(view,store,BTN_MINUS);
-    if (hit(x,y,260,654,190,66)) return view_input(view,store,BTN_ZL);
+    if (hit(x,y,260,654,145,66)) return view_input(view,store,BTN_ZL);
+    if (hit(x,y,420,654,140,66)) return view_input(view,store,BTN_X);
     if (hit(x,y,768,654,126,66)) return view_input(view,store,BTN_A);
     if (hit(x,y,24,654,195,66)) return view_input(view,store,BTN_R);
     if (hit(x,y,14,158,rail_width(view)-22,FILTERS*53)) {

@@ -1,10 +1,12 @@
 import os
+from io import BytesIO
 from pathlib import Path
 import struct
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
+from PIL import Image
 
 module = Path(__file__).resolve().parent
 output = Path(sys.argv[1])
@@ -87,7 +89,7 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
             os.environ.get('CC', 'cc'), '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
             *(['-DIZ_STORE_STANDALONE'] if standalone else []),
             '-I' + str(module / 'switch'), module / 'host-check.c', mock,
-            *(module / 'switch' / name for name in ('store.c', 'ui.c', 'download.c')),
+            *(module / 'switch' / name for name in ('store.c', 'ui.c', 'download.c', 'installed-artwork.c')),
             '-Wl,--wrap=catalog_download', '-lssl', '-lcrypto', '-o', binary,
         ], check=True)
 
@@ -144,5 +146,33 @@ bool __wrap_catalog_download(const char *url, uint64_t limit, DownloadSink sink,
         artwork.unlink()
         assert not run('refresh').strip()
         assert run('artwork').strip() == '1'
+        active = sd / ('switch/iz2s-store/catalog' if standalone else 'iz2s/modules/iz2s-store/catalog')
+        active.mkdir(parents=True)
+        local_id = 'sd-fixture'
+        local = ('IZSTORE2\napp\tsd-fixture\tnro\t1.0\tSD App\tExample\tTools\tTest.\n'
+                 'file\t123\t' + '0' * 64 + '\tlauncher.nro\n')
+        (active / 'catalog.tsv').write_text(local)
+        (active / 'artwork.bin').write_bytes(b'IZART1\n\x01' + local_id.encode().ljust(48, b'\0') + b'\xfe' * (96 * 96 * 4))
+        assert local_id not in run('list')
+        (cache.parent / 'settings.txt').write_text(url + '\nsd\n')
+        assert [line.split('\t')[0] for line in run('list').splitlines()] == [local_id]
+        assert run('artwork').strip() == '1'
+        install_root = sd / ('switch' if standalone else 'iz2s/modules')
+        jpeg = BytesIO()
+        Image.new('RGB', (32, 32), (255, 0, 0)).save(jpeg, format='JPEG')
+        image = jpeg.getvalue()
+        nro = bytearray(32 + 56)
+        nro[16:20] = b'NRO0'
+        struct.pack_into('<I', nro, 24, 32)
+        struct.pack_into('<4sIQQ', nro, 32, b'ASET', 0, 56, len(image))
+        for id in (local_id, 'not-in-catalog'):
+            binary_path = install_root / id / (id+'.nro' if standalone else 'launcher.nro')
+            binary_path.parent.mkdir()
+            binary_path.write_bytes(nro + image)
+        assert run('installed').splitlines() == [local_id]
+        icon = int(run('icon', local_id), 16)
+        assert icon >> 24 == 255 and icon & 255 >= 250
+        (install_root / local_id / '.izstore-icon.rgba').write_bytes(b'\x00\xff\x00\xff' * (96 * 96))
+        assert run('icon', local_id).strip() == 'ff00ff00'
 
-print('Verified catalog-free packages, automatic startup download, offline cache and SD data migration.')
+print('Verified both sources, Installed filter, SD thumbnails, embedded NRO icons and offline cache.')

@@ -189,7 +189,9 @@ static bool edit_catalog_url(View *view) {
     swkbdConfigSetInitialText(&keyboard, view->settings.url);
     rc = swkbdShow(&keyboard, settings.url, sizeof settings.url);
     swkbdClose(&keyboard);
-    if (R_FAILED(rc) || !strcmp(settings.url, view->settings.url)) return false;
+    settings.online = settings.url[0] != '\0';
+    if (R_FAILED(rc) || (settings.online == view->settings.online && !strcmp(settings.url, view->settings.url)))
+        return false;
     view->failure = !store_settings_write(SD_ROOT, &settings, view->message);
     if (view->failure) return false;
     view->settings = settings;
@@ -227,8 +229,11 @@ static void sync_artwork(Session *session, Store *store) {
     char folder[STORE_PATH];
     int length = snprintf(folder, sizeof folder, "%s" STORE_DIR, store->root);
     if (length >= 0 && (size_t)length < sizeof folder) artwork_update(&artwork, folder, store);
-    for (unsigned i = 0; i < store->count; ++i)
+    for (unsigned i = 0; i < store->count; ++i) {
+        if (!artwork.loaded[i])
+            artwork.loaded[i] = store_read_installed_icon(store, &store->apps[i], artwork.icons[i]);
         if (artwork.loaded[i]) store_sync_icon_pixels(store, &store->apps[i], artwork.icons[i]);
+    }
 }
 
 static void open_session(Session *session, bool hosted) {
@@ -250,7 +255,7 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
         threadClose(&session->thread);
         unsigned selected = view->count ? view->visible[view->cursor] : STORE_MAX_APPS;
         bool app_action = task->command == INSTALL || task->command == REMOVE;
-        bool changed = app_action || (task->ok && task->command != CHECK_NETWORK);
+        bool changed = app_action || task->command == REFRESH || (task->ok && task->command != CHECK_NETWORK);
         if (changed) session->active ^= 1u;
         store = &catalogs[session->active];
         if (changed) sync_artwork(session, store);
@@ -296,7 +301,21 @@ static bool tick_session(Session *session, unsigned pressed, bool touching, int 
     if (command == EXIT) return false;
     if (command == EDIT_URL) {
         command = NO_JOB;
-        if (edit_catalog_url(view)) command = view->settings.url[0] ? FETCH_LIST : REFRESH;
+        if (edit_catalog_url(view)) {
+            view->screen = CATALOG;
+            command = REFRESH;
+        }
+    }
+    if (command == TOGGLE_CATALOG_SOURCE) {
+        StoreSettings settings = view->settings;
+        settings.online = !settings.online;
+        view->failure = !store_settings_write(SD_ROOT, &settings, view->message);
+        command = NO_JOB;
+        if (!view->failure) {
+            view->settings = settings;
+            view->screen = CATALOG;
+            command = REFRESH;
+        }
     }
     if (command != NO_JOB && !view->busy)
         start_task(task, &session->thread, view, store, &catalogs[session->active ^ 1u], command);

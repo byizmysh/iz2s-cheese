@@ -31,11 +31,13 @@ python3 -B "$module_dir/assets.py" "$font_dir" "$work/romfs" "$work/icon.jpg"
 cp "$module_dir/licenses/DejaVu.txt" "$work/romfs/font-license.txt"
 if [ "$build_nro" = 1 ]; then
     cp "$DEVKITPRO"/libounce/licenses/*.txt "$work/romfs/"
+    cp "$module_dir/licenses/Octicons.txt" "$work/romfs/"
     "${cross}gcc" -std=gnu11 -O2 -Wall -Wextra -Werror -mcpu=cortex-a78c+crypto -mtp=soft \
         -fPIE -ffunction-sections -fdata-sections -D__SWITCH__ -D__SWITCH2__ -DIZ_STORE_STANDALONE \
         -isystem "$DEVKITPRO/libounce/include" -specs="$DEVKITPRO/libounce/switch.specs" \
         -L"$DEVKITPRO/libounce/lib" "$module_dir/switch/main.c" "$module_dir/switch/store.c" \
-        "$module_dir/switch/ui.c" "$module_dir/switch/download.c" -lounce -o "$work/standalone.elf"
+        "$module_dir/switch/ui.c" "$module_dir/switch/download.c" "$module_dir/switch/installed-artwork.c" \
+        -lounce -o "$work/standalone.elf"
     version=$(node -p 'require(process.argv[1]).version' "$module_dir/module.json")
     tools="$DEVKITPRO/tools/bin"
     "$tools/nacptool" --create 'IZ2S Store' IZMYSH "$version" "$work/standalone.nacp"

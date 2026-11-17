@@ -8,7 +8,7 @@ Switch 2 homebrew menu. The interface is in English.
 
 - **IZlauncher** — extract `iz2s-store-iza-sd.zip` to the SD root, or copy
   `iz2s-store.iza` as `/iz2s/modules/iz2s-store/launcher.iza`. This
-  edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.6.3
+  edition requires an IZ2S Platform 0.25 runtime with the IZ2S Store 0.7.0
   hosted service. After updating the runtime, restart IZlauncher.
 - **Switch 2 homebrew menu** — copy `iz2s-store.nro` as
   `/switch/iz2s-store/iz2s-store.nro`. The standalone build
@@ -16,7 +16,7 @@ Switch 2 homebrew menu. The interface is in English.
 
 ## Add a catalog
 
-1. Open **Settings** with **−** and select **Catalog URL**.
+1. Open **Settings** with **−** and select **Catalog URL** to use an online catalog.
 2. Enter the raw HTTPS URL of an external GitHub `catalog.tsv`, or its HTTP URL
    on a private IPv4 LAN server.
 3. Confirm the URL. The Store downloads the catalog and its thumbnails
@@ -25,9 +25,13 @@ Switch 2 homebrew menu. The interface is in English.
    and are missing the catalog or its thumbnails, the Store tries to download
    the missing data when it opens.
 
-You can also copy a catalog to `/iz2s/iz2s-store/catalog.tsv` on the SD card and
-press **Y** to reload it. A downloaded list can add to that local list or
-replace its online entries by ID. Clear the URL to use only the local file.
+For a local catalog, place `catalog.tsv` and `artwork.bin` together:
+- IZA: `/iz2s/modules/iz2s-store/catalog/`
+- NRO: `/switch/iz2s-store/catalog/`
+
+Choose **SD card** in **Settings → Catalog source** and press **Y** to reload
+after changing the files. The Store shows entries from the selected source.
+Older SD catalogs in `/iz2s/iz2s-store/` are supported as a fallback.
 
 The repository and release packages ship without a catalog or application
 payloads. A fresh installation opens with an empty list and no configured URL.
@@ -43,7 +47,11 @@ Use the controller or touch screen to browse categories and app details.
 Open the repository tile with **R** to see the publisher URL. Select
 **Download** or **Update** to install a verified release. **B** cancels a
 download and **Y** minimizes it while you continue browsing. **X** opens the
-removal dialog for apps managed by the store. Saved data is kept.
+removal dialog for apps managed by the store. Saved data is kept. Installed
+lists only entries in the active catalog. If its thumbnail is missing, the
+Store looks for the installed app's thumbnail or uses its embedded icon.
+
+Press **X** on the catalog screen for About and the author and project links.
 
 The IZA edition installs to `/iz2s/modules/<id>/`. The standalone edition
 installs NROs to `/switch/<id>/<id>.nro`. IZA entries require IZlauncher.
@@ -84,7 +92,7 @@ IZ_STORE_FONT_DIR=/path/to/dejavu sh build.sh nro
 ```
 
 To build IZA, set `IZ2S_PLATFORM_ROOT` to a checkout of IZ2S Platform 0.25
-with the Store 0.6.3 hosted service. Install the SB4 headers alongside the
+with the Store 0.7.0 hosted service. Install the SB4 headers alongside the
 devkitPro folder and put `glslangValidator` and `spirv-val` on PATH.
 
 ```sh
@@ -95,4 +103,4 @@ Use `nro`, `iza`, or `both`. Set `IZ_STORE_OUT` to change the output
 directory. Use `IZ_STORE_CHECK=1` to run package and catalog checks with a
 host C compiler and OpenSSL development headers.
 
-The Store is MIT licensed. Font and library notices are included with the build.
+The Store is MIT licensed. The GitHub mark is from Primer Octicons. The NRO icon decoder uses stb_image. Third-party notices are included with the build.
