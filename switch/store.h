@@ -62,7 +62,7 @@ void store_clear(Store *store);
 bool store_clone(Store *target, const Store *source);
 bool store_load(Store *store, const char *root, char message[STORE_MESSAGE]);
 bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
-                           char message[STORE_MESSAGE]);
+                           bool fetch_updates, char message[STORE_MESSAGE]);
 void store_settings_read(const char *root, StoreSettings *settings);
 bool store_settings_write(const char *root, const StoreSettings *settings, char message[STORE_MESSAGE]);
 bool store_fetch_list(Store *store, const StoreSettings *settings, char message[STORE_MESSAGE]);

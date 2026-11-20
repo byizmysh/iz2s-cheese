@@ -881,7 +881,7 @@ bool store_fetch_list(Store *store, const StoreSettings *settings, char out[STOR
 }
 
 bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *settings,
-                           char out[STORE_MESSAGE]) {
+                           bool fetch_updates, char out[STORE_MESSAGE]) {
     if (!store_load(store, root, out)) return false;
     if (!settings->online) {
         if (!store->count) snprintf(out, STORE_MESSAGE, "Copy catalog.tsv and artwork.bin to IZ2S Cheese catalog folder.");
@@ -891,10 +891,15 @@ bool store_refresh_catalog(Store *store, const char *root, const StoreSettings *
         snprintf(out, STORE_MESSAGE, "Set Catalog URL in Settings.");
         return true;
     }
-    if (!store->remote_count) {
+    if (fetch_updates || !store->remote_count) {
         if (store_fetch_list(store, settings, out)) return true;
-        char recovery[STORE_MESSAGE];
-        return store_load(store, root, recovery) && store->count > 0;
+        char error[STORE_MESSAGE], recovery[STORE_MESSAGE];
+        snprintf(error, sizeof error, "%s", out[0] ? out : "Could not download catalog.");
+        bool cached = store_load(store, root, recovery) && store->count > 0;
+        if (cached)
+            snprintf(out, STORE_MESSAGE, "Update failed; showing cached catalog. %.119s", error);
+        else snprintf(out, STORE_MESSAGE, "%s", error);
+        return !fetch_updates && cached;
     }
     if (!store_read_artwork(store, settings, NULL) && !store_fetch_artwork(store, settings))
         snprintf(out, STORE_MESSAGE, "No thumbnails received. Check artwork.bin next to catalog.tsv.");

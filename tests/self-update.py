@@ -19,9 +19,9 @@ with tempfile.TemporaryDirectory(prefix='store-self-update-') as name:
             with ZipFile(release/'iz2s-cheese-iza-sd.zip') as z:
                 for p in z.namelist():
                     if p.endswith('.izdata'):files.append((Path(p).name,release/Path(p).name))
-        rows=['IZSTORE2',f'app\tiz2s-cheese\t{kind}\t0.8.0\tIZ2S Cheese\tIZMYSH\tTools\tHomebrew store.']
+        rows=['IZSTORE2',f'app\tiz2s-cheese\t{kind}\t0.8.1\tIZ2S Cheese\tIZMYSH\tTools\tHomebrew store.']
         rows += [f'file\t{p.stat().st_size}\t{hashlib.sha256(p.read_bytes()).hexdigest()}\t{n}' for n,p in files]
-        rows += [f'github\thttps://github.com/byizmysh/iz2s-cheese/releases/download/v0.8.0/iz2s-cheese.{kind}']
+        rows += [f'github\thttps://github.com/byizmysh/iz2s-cheese/releases/download/v0.8.1/iz2s-cheese.{kind}']
         catalog.write_text('\n'.join(rows)+'\n')
         binary=work/('test-'+kind)
         subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror',
