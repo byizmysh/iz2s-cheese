@@ -3,7 +3,12 @@
 #include <string.h>
 
 #define STB_IMAGE_IMPLEMENTATION
+#ifdef IZ_STORE_MODULE
+#define STB_IMAGE_STATIC
+#define STBI_NO_FAILURE_STRINGS
+#else
 #define STBIDEF extern __attribute__((visibility("hidden")))
+#endif
 #define STBI_ONLY_JPEG
 #define STBI_NO_STDIO
 #define STBI_NO_SIMD

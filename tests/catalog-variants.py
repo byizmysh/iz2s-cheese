@@ -61,6 +61,8 @@ with tempfile.TemporaryDirectory(prefix='cheese-variants-') as folder:
         release={'tag_name':'v0.8.3','draft':False,'prerelease':False,'body':'Text with \\"quotes\\" and {braces}.','assets':assets}
         metadata.write_text(json.dumps(release))
         output=run('update');assert output.startswith(mode+'\t0.8.3\t'+('1'if standalone else '2'))
+        metadata.write_text(json.dumps({**release,'assets':assets[-2:]}))
+        assert run('update').startswith(mode+'\t0.8.3\t1\t')
         assert settings.read_bytes()==settings_before and cache.read_bytes()==cache_before
         for malformed in ['{bad','['*30+'0'+']'*30,'x'*65537]:
             metadata.write_text(malformed);run('update',code=1)

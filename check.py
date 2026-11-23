@@ -7,7 +7,6 @@ import struct
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from zipfile import ZipFile
 from PIL import Image
 
 module = Path(__file__).resolve().parent
@@ -15,40 +14,23 @@ output = Path(sys.argv[1])
 check_iza, check_nro = (value == '1' for value in sys.argv[2:])
 
 if check_iza:
-    prefix = 'iz2s/modules/iz2s-cheese/'
-    with ZipFile(output / 'iz2s-cheese-iza-sd.zip') as archive, \
-            ZipFile(output / 'iz2s-cheese-install.iza') as installer:
-        bundle = json.loads(archive.read(prefix + 'sd-bundle.json'))
-        companions = bundle['assets']
-        assert len(companions) == 1
-        members = {'launcher.iza', 'sd-bundle.json', *(item['file'] for item in companions)}
-        assert sorted(archive.namelist()) == sorted(prefix + name for name in members)
-        assert sorted(installer.namelist()) == sorted(members)
-        for name in members:
-            assert installer.read(name) == archive.read(prefix + name)
-        for item in companions:
-            engine = installer.read(item['file'])
-            assert len(engine) == item['bytes'] and hashlib.sha256(engine).hexdigest() == item['sha256']
-            assert engine.startswith(b'IZNATRL1')
-            assert b'sb4IZ2SCheeseEvent' not in engine
-            assert b'sb4NativeServicesVersion' not in engine
-            assert b'sslConnectionDoHandshake' in engine and b'swkbdShow' in engine
-        iza = installer.read('launcher.iza')
-        assert bundle['launcher']['sha256'] == hashlib.sha256(iza).hexdigest()
-        assert b'sb4IZ2SCheeseEvent' not in iza
-        assert b'sb4NativeServicesVersion' not in iza
-    assert iza == (output / 'iz2s-cheese.iza').read_bytes()
+    iza = (output / 'iz2s-cheese.iza').read_bytes()
     assert iza.startswith(b'IZSDAPP1')
-    artwork = iza.index(b'IZSTOREA')
-    assert iza[artwork + 8] == 0
+    version, header_size, size, flags = struct.unpack_from('<4I', iza, 8)
+    assert (version, header_size, size, flags) == (2, 512, len(iza), 1 | 1024)
+    assert iza[24:72].rstrip(b'\0') == b'iz2s-cheese'
+    assert iza[160:168] == bytes(8) and iza[368:400] == bytes(32)
+    art_offset, art_size = struct.unpack_from('<2I', iza, 176 + 16)
+    assert iza[art_offset:art_offset + 9] == b'IZSTOREA\0' and art_size > 600000
+    offset, size = struct.unpack_from('<2I', iza, 176 + 16 * 10)
+    assert offset >= 512 and size > 60000 and offset + size <= len(iza)
+    native = iza[offset:offset + size]
+    assert b'sslConnectionDoHandshake' in native and b'swkbdShow' in native
+    assert b'sb4IZ2SCheeseEvent' not in native and b'sb4NativeServicesVersion' not in native
     assert b'IZSTORE2\napp\t' not in iza
 
 if check_nro:
-    entry = 'switch/iz2s-cheese/iz2s-cheese.nro'
-    with ZipFile(output / 'iz2s-cheese-nro-sd.zip') as archive:
-        assert archive.namelist() == [entry]
-        nro = archive.read(entry)
-    assert nro == (output / 'iz2s-cheese.nro').read_bytes()
+    nro = (output / 'iz2s-cheese.nro').read_bytes()
     assert nro[16:20] == b'NRO0'
     mod = struct.unpack_from('<I', nro, 4)[0]
     assert nro[mod:mod+4] == b'MOD0' and b'OUN0\x02\0\0\0\x01\0\0\0' in nro[mod:mod+128]

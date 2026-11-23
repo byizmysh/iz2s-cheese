@@ -17,7 +17,7 @@ enum {
 };
 enum { SMALL, NORMAL, MEDIUM, LARGE };
 
-static const char *const filters[FILTERS] = {
+static const char filters[FILTERS][12] = {
     "All apps", "Installed", "Updates", "Tools", "Media", "Emulators", "Games"
 };
 static const unsigned font_height[] = { 24, 28, 34, 42 };
@@ -431,7 +431,7 @@ static const char *catalog_title(const CatalogSource *source, char title[RELEASE
 static void settings(Canvas *canvas, const Store *store, const View *view) {
     label(canvas,CARD_X,34,850,LARGE,ink,"Settings");
     rectangle(canvas,CARD_X,97,SETTINGS_W,1,edge);
-    const char *titles[SETTINGS_COUNT] = {
+    static const char titles[SETTINGS_COUNT][28] = {
         "Catalogs", "Refresh catalogs", "Test GitHub connection", "Check for Cheese updates", "About"
     };
     const App *self = store_self_entry(store);
@@ -536,7 +536,7 @@ static void dialog(Canvas *canvas, const Store *store, const App *app, const Vie
         rounded(canvas,220,114,840,472,16,panel,bar);
         label(canvas,252,140,760,LARGE,ink,"IZ2S Cheese");
         label(canvas,252,200,760,NORMAL,muted,"Developer: IZMYSH");
-        const struct { const char *title, *url; } links[] = {
+        static const struct { char title[16], url[64]; } links[] = {
             {"Author", "https://github.com/byizmysh"},
             {"IZ2S Cheese", "https://github.com/byizmysh/iz2s-cheese"},
             {"IZ2S Platform", "https://github.com/byizmysh/IZ2S-Platform"}

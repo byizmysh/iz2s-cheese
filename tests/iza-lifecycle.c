@@ -1,5 +1,5 @@
 /* Run the actual ARM64 module through INIT/FRAME/STOP with host services.
- * Device calls are mocks; this exercises relocation and ownership, not TLS IPC. */
+ * The native section runs at an arbitrary mapped address with mocked device calls. */
 #define _GNU_SOURCE
 #include <assert.h>
 #include <dlfcn.h>
@@ -11,52 +11,17 @@
 #include <sb4/native-app.h>
 
 typedef uint32_t (*Entry)(IzNativeApp *, uint32_t);
-static const char *image_path, *missing;
-static int service_revision, creates, joins, closes, loads, unloads, reports, completed;
+static const char *missing;
+static int service_revision, creates, joins, closes, reports, completed;
 static void (*worker)(void *);
-static void *worker_arg, *image_code, *image_data;
-static size_t code_size, data_size;
+static void *worker_arg;
 static char report[128];
 static uint64_t held;
 static unsigned keyboard_open, keyboard_show, keyboard_close, tls_open, tls_close, sockets_closed, dns_calls;
-static uint64_t read64(const void *p) { uint64_t v; memcpy(&v,p,8); return v; }
-static uint32_t read32(const void *p) { uint32_t v; memcpy(&v,p,4); return v; }
 static unsigned char *read_file(const char *path, size_t *bytes) {
     FILE *f=fopen(path,"rb"); assert(f); assert(!fseek(f,0,SEEK_END));
     *bytes=(size_t)ftell(f); rewind(f); unsigned char *p=malloc(*bytes); assert(p);
     assert(fread(p,1,*bytes,f)==*bytes); assert(!fclose(f)); return p;
-}
-static uint32_t load(IzNativeApp *app,const char *name,IzNativeImage *out) {
-    (void)app; assert(!strncmp(name,"asset-",6)); assert(!image_code); ++loads;
-    size_t bytes; unsigned char *raw=read_file(image_path,&bytes);
-    assert(bytes>=256&&!memcmp(raw,"IZNATRL1",8));
-    code_size=read32(raw+48); data_size=read32(raw+52);
-    image_code=mmap(NULL,code_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
-    image_data=mmap(NULL,data_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
-    assert(image_code!=MAP_FAILED&&image_data!=MAP_FAILED);
-    void *segments[]={image_code,image_data};
-    for(unsigned i=0;i<2;++i) {
-        uint64_t offset=read64(raw+56+8*i); size_t length=read32(raw+40+4*i);
-        assert(offset<=bytes&&length<=bytes-offset); memcpy(segments[i],raw+offset,length);
-    }
-    uint64_t records=read64(raw+72); uint32_t count=read32(raw+80);
-    assert(read32(raw+84)==32 && records+32ull*count<=bytes);
-    for(unsigned i=0;i<count;++i) {
-        unsigned char *r=raw+records+32*i; assert(r[4]==1&&!r[5]&&r[6]<2&&r[7]<2);
-        uint32_t offset=read32(r); uint64_t target=read64(r+16);
-        assert(read64((char*)segments[r[6]]+offset)==read64(r+8));
-        uint64_t value=(uintptr_t)segments[r[7]]+target;
-        assert(offset+8<=(r[6]?data_size:code_size)); memcpy((char*)segments[r[6]]+offset,&value,8);
-    }
-    __builtin___clear_cache(image_code,(char*)image_code+code_size);
-    assert(!mprotect(image_code,code_size,PROT_READ|PROT_EXEC));
-    *out=(IzNativeImage){.version=1,.bytes=sizeof(*out),.code=image_code,.code_bytes=code_size,
-        .data=image_data,.data_bytes=data_size,.entry=(char*)image_code+read32(raw+100),.token=42};
-    free(raw); return 0;
-}
-static uint32_t unload(IzNativeApp *app,uint64_t token) {
-    (void)app; assert(token==42&&joins==creates&&closes==creates);
-    ++unloads; munmap(image_code,code_size);munmap(image_data,data_size);image_code=image_data=NULL;return 0;
 }
 static uint32_t version(void) {return service_revision;}
 static uint32_t create(void *t,void (*fn)(void*),void *arg,void *stack,size_t size,int priority,int core) {
@@ -112,34 +77,36 @@ static void press(Entry entry,IzNativeApp *app,uint64_t key) {
     held=key;assert(!entry(app,IZ_NATIVE_FRAME));held=0;assert(!entry(app,IZ_NATIVE_FRAME));
 }
 int main(int argc,char **argv) {
-    assert(argc==4); image_path=argv[2];
+    assert(argc==3);
     size_t bytes; unsigned char *bin=read_file(argv[1],&bytes);
-    void *code=mmap(NULL,bytes,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
-    assert(code!=MAP_FAILED);memcpy(code,bin,bytes);free(bin);
-    __builtin___clear_cache(code,(char*)code+bytes);assert(!mprotect(code,bytes,PROT_READ|PROT_EXEC));
+    size_t code_bytes=bytes;
+    void *code=mmap(NULL,code_bytes,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+    assert(code!=MAP_FAILED);memcpy(code,bin,code_bytes);free(bin);
+    __builtin___clear_cache(code,(char*)code+code_bytes);assert(!mprotect(code,code_bytes,PROT_READ|PROT_EXEC));
     Entry entry=(Entry)code;
     Sb4Compat api={.version=1,.bytes=sizeof api,.backend=1,.resolve_c=resolve,.resolve_service=service,
         .allocate_aligned=allocate,.release=free,.ticks=tick,.tick_hz=tick,.sleep_ns=sleep_ns};
     IzNativeApp7 module={0}; IzNativeApp *app=(IzNativeApp*)&module;
-    module.sb4=&api; module.base.base.base.base.load_image=load;
-    module.base.base.base.base.unload_image=unload;
+    module.sb4=&api;
     app->magic=0x414e5a49;app->version=7;app->bytes=sizeof module;app->data=calloc(1,4096);app->data_bytes=4096;
     app->controls=calloc(1,0x800000);app->controls_bytes=0x800000;
     app->write_file=write_report;app->buttons=buttons;app->request_exit=request_exit;
-    unsigned char *art=read_file(argv[3],&bytes);assert(bytes<0x200000-1024);
+    unsigned char *art=read_file(argv[2],&bytes);assert(bytes<0x200000-1024);
     memcpy((char*)app->controls+1024,art,bytes);free(art);
+    assert(entry(NULL,IZ_NATIVE_INIT)==0xe870);
     missing="sslConnectionDoHandshake";
     assert(entry(app,IZ_NATIVE_INIT)==0xe872);assert(reports==1&&!strcmp(report,missing));
-    assert(!entry(app,IZ_NATIVE_STOP)&&loads==unloads&&!creates);
+    assert(!entry(app,IZ_NATIVE_STOP)&&!creates);
     missing="__assert_func";
     for(service_revision=0;service_revision<3;++service_revision) {
-        memset(app->data,0,4096);assert(!entry(app,IZ_NATIVE_INIT));
-        assert(entry(app,IZ_NATIVE_STOP)==IZ_NATIVE_STOP_PENDING);assert(loads==unloads+1);
+        assert(!entry(app,IZ_NATIVE_INIT));
+        assert(entry(app,IZ_NATIVE_INIT)==0xe875);
+        assert(entry(app,IZ_NATIVE_STOP)==IZ_NATIVE_STOP_PENDING);
         worker(worker_arg);completed=1;
-        assert(!entry(app,IZ_NATIVE_STOP));assert(loads==unloads&&creates==joins&&joins==closes);
+        assert(!entry(app,IZ_NATIVE_STOP));assert(creates==joins&&joins==closes);
         missing=NULL;
     }
-    memset(app->data,0,4096);assert(!entry(app,IZ_NATIVE_INIT));
+    assert(!entry(app,IZ_NATIVE_INIT));
     worker(worker_arg);completed=1;assert(!entry(app,IZ_NATIVE_FRAME));
     press(entry,app,1u<<2);press(entry,app,1u<<2); /* Catalogs > Add URL */
     assert(keyboard_open==1&&keyboard_show==1&&keyboard_close==1);
@@ -148,7 +115,8 @@ int main(int argc,char **argv) {
     press(entry,app,1u<<15);press(entry,app,1u<<15);press(entry,app,1u); /* Test GitHub */
     worker(worker_arg);completed=1;assert(!entry(app,IZ_NATIVE_FRAME));
     assert(tls_open==1&&tls_close==1&&dns_calls==1&&sockets_closed==0);
-    assert(!entry(app,IZ_NATIVE_STOP));assert(loads==unloads&&creates==joins&&joins==closes);
+    assert(!entry(app,IZ_NATIVE_STOP));assert(creates==joins&&joins==closes);
     free(app->data);free(app->controls);
-    puts("ARM64 module: relocation, service discovery, missing import, cancellation, repeated startup, keyboard, DNS failure, and socket/TLS cleanup PASS");
+    assert(!munmap(code,code_bytes));
+    puts("ARM64 embedded executable: service discovery, worker context, repeated startup, cancellation, keyboard and socket/TLS cleanup PASS");
 }

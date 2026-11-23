@@ -63,7 +63,7 @@ supported by the IZ2S edition of IZ2S Cheese.
 
 ## Cheese updates
 
-Reserve `iz2s-cheese` for IZ2S Cheese itself. Use an official release URL of the form `https://github.com/byizmysh/iz2s-cheese/releases/download/v<VERSION>/iz2s-cheese.iza` or its `.nro` counterpart. An `IZSTORE3` feed can include both groups under this ID. IZA needs its companion `file` row; publish that exact `.izdata` asset in the same release. Both groups share the `iz2s-cheese` artwork image. List sizes and SHA-256 from the actual release files, including same-version rebuilds. Cheese selects its own build and cannot remove itself. Settings can also check GitHub Releases directly, so self-update does not depend on this catalog entry.
+Reserve `iz2s-cheese` for IZ2S Cheese itself. Use an official release URL of the form `https://github.com/byizmysh/iz2s-cheese/releases/download/v<VERSION>/iz2s-cheese.iza` or its `.nro` counterpart. An `IZSTORE3` feed can include both groups under this ID. Each current build uses one `file` row and both groups share the `iz2s-cheese` artwork image. Use the actual release sizes and SHA-256 digests, including for same-version rebuilds. Settings can check GitHub Releases directly.
 
 ## Dependency limits
 

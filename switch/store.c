@@ -521,7 +521,9 @@ const App *store_self_entry(const Store *store) {
     return NULL;
 }
 
+#ifndef IZ_STORE_MODULE
 static const char *running_version;
+#endif
 #ifdef IZ_STORE_STANDALONE
 static const char store_program[] = "/switch/iz2s-cheese/iz2s-cheese.nro";
 void store_set_running_nro(const char *path, const char *version) {
@@ -530,8 +532,18 @@ void store_set_running_nro(const char *path, const char *version) {
 }
 #else
 static const char store_program[] = MODULE_DIR "/iz2s-cheese/launcher.iza";
+#ifndef IZ_STORE_MODULE
 void store_set_running_iza(const char *version) { running_version = version; }
 #endif
+#endif
+
+static const char *store_running_version(void) {
+#ifdef IZ_STORE_MODULE
+    return IZ_STORE_VERSION;
+#else
+    return running_version;
+#endif
+}
 
 static bool stable_version(const char *value, unsigned parts[3]) {
     for (unsigned i = 0; i < 3; ++i) {
@@ -548,9 +560,10 @@ static bool self_update_available(const Store *store, const Package *package) {
 #ifdef IZ_STORE_STANDALONE
     if (package->kind != PACKAGE_NRO || package->count != 1) return false;
 #else
-    if (package->kind != PACKAGE_IZM || package->count < 2) return false;
+    if (package->kind != PACKAGE_IZM || !package->count) return false;
 #endif
-    if (!running_version || !stable_version(running_version, current) || !stable_version(package->version, candidate)) return false;
+    const char *version = store_running_version();
+    if (!version || !stable_version(version, current) || !stable_version(package->version, candidate)) return false;
     char expected[RELEASE_URL_MAX];
     int length = snprintf(expected, sizeof expected,
         "https://github.com/byizmysh/iz2s-cheese/releases/download/v%s/iz2s-cheese.%s",
@@ -567,8 +580,8 @@ void store_refresh(const Store *store, App *app) {
     app->installed_version[0] = '\0';
     if (is_store_entry(&app->package)) {
         app->state = SELF_ENTRY;
-        if (running_version)
-            snprintf(app->installed_version, sizeof app->installed_version, "%s", running_version);
+        const char *version = store_running_version();
+        if (version) snprintf(app->installed_version, sizeof app->installed_version, "%s", version);
         if (self_update_available(store, &app->package)) app->state = UPDATE_AVAILABLE;
         return;
     }
@@ -770,12 +783,13 @@ bool store_check_update(Store *store, char out[STORE_MESSAGE]) {
     if (!ok) return false;
     store_refresh(store, &update);
     store->update = update; store->update_checked = true;
+    const char *version = store_running_version();
     if (update.state == UPDATE_AVAILABLE)
         snprintf(out, STORE_MESSAGE, "IZ2S Cheese %s is available. Download and install this update?", update.package.version);
-    else if (!running_version)
+    else if (!version)
         snprintf(out, STORE_MESSAGE, "Latest version: %s. Use the official SD path to enable updates.", update.package.version);
     else
-        snprintf(out, STORE_MESSAGE, "You are up to date. Running %s; latest stable release %s.", running_version, update.package.version);
+        snprintf(out, STORE_MESSAGE, "You are up to date. Running %s; latest stable release %s.", version, update.package.version);
     return true;
 }
 
@@ -990,7 +1004,7 @@ static bool read_settings_file(const char *name, StoreSettings *settings, bool m
 void store_settings_read(const char *root, StoreSettings *settings) {
     *settings = (StoreSettings){.sd_enabled = local_catalog_available(root)};
     char name[STORE_PATH];
-    const char *files[] = {"settings.txt", "settings.txt.bak", "remote.tsv", "remote.tsv.bak"};
+    static const char files[][20] = {"settings.txt", "settings.txt.bak", "remote.tsv", "remote.tsv.bak"};
     for (unsigned i = 0; i < sizeof files / sizeof *files; ++i)
         if (path(name, "%s" STORE_DIR "/%s", root, files[i]) &&
             read_settings_file(name, settings, i < 2)) break;
@@ -1702,7 +1716,7 @@ bool store_remove(const Store *store, const App *app, char out[STORE_MESSAGE]) {
     if (unlink(active) || !commit(directory)) return message(out, "Could not remove the application.");
 #ifndef IZ_STORE_STANDALONE
     if (app->package.kind != PACKAGE_IZM) {
-        static const char *const icons[] = {".izcheese-icon.rgba", ".izcheese-icon.rgba.bak"};
+        static const char icons[][24] = {".izcheese-icon.rgba", ".izcheese-icon.rgba.bak"};
         for (size_t i = 0; i < sizeof icons / sizeof *icons; ++i) {
             char icon[STORE_PATH];
             if (path(icon, "%s/%s", directory, icons[i]) && file_state(icon) == REGULAR)
