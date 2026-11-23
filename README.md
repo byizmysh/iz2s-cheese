@@ -3,8 +3,8 @@
 A free homebrew hub for Nintendo Switch 2.
 
 <p>
-  <a href="screenshots/catalog.png"><img src="screenshots/catalog.png" width="49%" alt="IZ2S Cheese catalog with app tiles and categories"></a>
-  <a href="screenshots/app-details.png"><img src="screenshots/app-details.png" width="49%" alt="App details with the download button and publisher link"></a>
+  <a href="screenshots/catalog.png"><img src="screenshots/catalog.png" width="49%" alt="IZ2S Cheese catalog showing IZA and NRO apps"></a>
+  <a href="screenshots/app-details.png"><img src="screenshots/app-details.png" width="49%" alt="IZPSX details in IZ2S Cheese"></a>
 </p>
 
 ## Choose your build
